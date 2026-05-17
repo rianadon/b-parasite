@@ -112,7 +112,7 @@
 &adc {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "ok";
+	status = "okay";
 
 	// Soil.
 	channel@0 {
