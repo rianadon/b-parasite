@@ -18,7 +18,7 @@ runs:
   steps:
     - run: |
         docker run --rm -v ${GITHUB_WORKSPACE}:/repo \
-          nordicplayground/nrfconnect-sdk:v2.7-branch \
+          ghcr.io/nrfconnect/sdk-nrf-toolchain:v3.3.0 \
           west build \
             --build-dir /repo/${{ inputs.sample-dir }}/build_${{ inputs.soc }}_${{ inputs.revision }} \
             --pristine \
