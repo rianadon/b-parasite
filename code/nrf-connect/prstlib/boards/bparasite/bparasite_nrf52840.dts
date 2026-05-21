@@ -112,7 +112,7 @@
 &adc {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "ok";
+	status = "okay";
 
 	// Soil.
 	channel@0 {
@@ -137,6 +137,10 @@
 	};
 };
 
+
+&reg1 {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
 
 &flash0 {
 

@@ -1,5 +1,7 @@
 board:
   name: bparasite
+  full_name: b-parasite
+  vendor: rbaron
   socs:
     - name: nrf52833
     - name: nrf52840
