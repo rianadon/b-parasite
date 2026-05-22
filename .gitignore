@@ -1,3 +1,17 @@
 *.swp
 .vscode
 .DS_Store
+
+# west workspace lives under code/ (workspace top dir)
+/code/.west/
+/code/bootloader/
+/code/modules/
+/code/nrf/
+/code/nrfxlib/
+/code/test/
+/code/tools/
+/code/zephyr/
+/code/ncs-zigbee/
+
+# west build output dirs
+**/build_*/

@@ -11,7 +11,7 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     name: Check code format
     steps:
       - name: Checkout
@@ -19,11 +19,12 @@ jobs:
       - name: Check clang-format
         uses: jidicula/clang-format-action@v4.9.0
         with:
-          check-path: "code/nrf-connect"
+          check-path: "code"
           exclude-regex: '\/build\/'
 
   build-blinky:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     name: Build blinky
     needs:
       - lint
@@ -33,13 +34,14 @@ jobs:
       - name: Build blinky
         uses: ./.github/actions/build
         with:
-          sample-dir: code/nrf-connect/samples/blinky
+          sample: blinky
           soc: nrf52840
           revision: 2.0.0
           output-bin: blinky_nrf52840_2.0.0.hex
 
   build-input:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     name: Build input
     needs:
       - lint
@@ -49,13 +51,14 @@ jobs:
       - name: Build input
         uses: ./.github/actions/build
         with:
-          sample-dir: code/nrf-connect/samples/input
+          sample: input
           soc: nrf52840
           revision: 2.0.0
           output-bin: input_nrf52840_2.0.0.hex
 
   build-soil-read-loop:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     name: Build soil_read_loop
     needs:
       - lint
@@ -65,7 +68,7 @@ jobs:
       - name: Build soil_read_loop
         uses: ./.github/actions/build
         with:
-          sample-dir: code/nrf-connect/samples/soil_read_loop
+          sample: soil-read-loop
           soc: nrf52840
           revision: 2.0.0
           output-bin: soil_read_loop_nrf52840_2.0.0.hex
@@ -75,7 +78,8 @@ jobs:
       matrix:
         soc: [nrf52840, nrf52833]
         revision: [1.1.0, 1.2.0, 2.0.0]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     name: Build ble ${{ matrix.soc }}@${{ matrix.revision }}
     needs:
       - lint
@@ -85,7 +89,7 @@ jobs:
       - name: Build
         uses: ./.github/actions/build
         with:
-          sample-dir: code/nrf-connect/samples/ble
+          sample: ble
           soc: ${{ matrix.soc }}
           revision: ${{ matrix.revision }}
           cmake-extra: -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y -DCONFIG_PRST_SLEEP_DURATION_MSEC=1000 -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
@@ -96,7 +100,8 @@ jobs:
       matrix:
         soc: [nrf52840, nrf52833]
         revision: [1.2.0, 2.0.0]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     name: Build zigbee ${{ matrix.soc }}@${{ matrix.revision }}
     needs:
       - lint
@@ -106,18 +111,18 @@ jobs:
       - name: Build
         uses: ./.github/actions/build
         with:
-          sample-dir: code/nrf-connect/samples/zigbee
+          sample: zigbee
           soc: ${{ matrix.soc }}
           revision: ${{ matrix.revision }}
           cmake-extra: -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
           output-bin: zigbee_${{ matrix.soc }}_${{ matrix.revision }}.hex
-          zigbee: "true"
 
   # Create a draft release if the build was triggered by a v* tag push.
   maybe-release:
-    needs: [build-ble, build-zigbee]
+    needs:
+      [build-ble, build-zigbee, build-blinky, build-input, build-soil-read-loop]
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
