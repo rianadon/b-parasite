@@ -48,15 +48,15 @@ fi
 # The Zephyr CI image bakes in ZEPHYR_BASE=/workspace/zephyr for its canonical
 # layout. Our workspace topdir is code/, so let west rediscover zephyr from
 # the manifest by clearing the env var.
-unset ZEPHYR_BASE
+# unset ZEPHYR_BASE
 
-if [ ! -d .west ]; then
-  west init -l prstlib
-  west update -o=--depth=1 -n
-  pip install \
-    -r zephyr/scripts/requirements.txt \
-    -r nrf/scripts/requirements.txt
-fi
+# if [ ! -d .west ]; then
+west init -l prstlib
+west update -o=--depth=1 -n
+pip install \
+  -r zephyr/scripts/requirements.txt \
+  -r nrf/scripts/requirements.txt
+# fi
 
 west build --pristine \
   --build-dir "samples/$SAMPLE/build_${SOC}_${REV}" \
