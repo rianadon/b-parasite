@@ -4,11 +4,19 @@
 # workspace (sdk-nrf, zephyr, modules, …) into code/; subsequent runs reuse it.
 set -euo pipefail
 
-IMAGE="${B_PARASITE_DOCKER_IMAGE:-ghcr.io/zephyrproject-rtos/ci:v0.28.8}"
+if [[ "$(uname -m)" == "arm64" ]]; then
+  echo "Running on arm64 docker image"
+  IMAGE="${B_PARASITE_DOCKER_IMAGE:-ghcr.io/zephyrproject-rtos/ci:v0.28.8-arm64}"
+else
+  echo "Running on amd64 docker image"
+  IMAGE="${B_PARASITE_DOCKER_IMAGE:-ghcr.io/zephyrproject-rtos/ci:v0.28.8}"
+fi
 
 # Mount code/ as /workspace inside the container — that's the west workspace
 # top dir, all the script needs.
 WORKSPACE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "Running build inside docker image '$IMAGE' with workspace_dir='$WORKSPACE_DIR'…"
 
 exec docker run --rm \
   -v "$WORKSPACE_DIR":/workspace \
@@ -16,4 +24,3 @@ exec docker run --rm \
   -e CMAKE_EXTRA="${CMAKE_EXTRA:-}" \
   "$IMAGE" \
   scripts/build.sh "$@"
-

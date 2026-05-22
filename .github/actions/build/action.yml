@@ -30,6 +30,5 @@ runs:
       with:
         name: ${{ inputs.output-bin }}
         path: code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}/merged.hex
-        archive: false
         if-no-files-found: error
         retention-days: 30

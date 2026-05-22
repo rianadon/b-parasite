@@ -3,7 +3,8 @@ manifest:
     - name: nrfconnect
       url-base: https://github.com/nrfconnect
   projects:
-    # - name: sdk-nrf
+    # - name: nrf
+    #   repo-path: sdk-nrf
     #   remote: nrfconnect
     #   revision: v3.3.0
     #   import: true

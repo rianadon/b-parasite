@@ -14,7 +14,7 @@ usage() {
 usage: $(basename "$0") <sample> [soc] [revision]
   sample    blinky | input | ble | soil-read-loop | zigbee
   soc       nrf52840 (default) | nrf52833
-  revision  2.0.0 (default) | 1.2.0 | 1.1.0
+  revision  2.0.0 (default) | 1.2.0 | 1.1.0 | 1.0.0
 
 env:
   CMAKE_EXTRA   extra -D… flags appended to west build
@@ -38,6 +38,7 @@ esac
 
 # The workspace top dir is the parent of this script's dir (code/scripts/).
 WORKSPACE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+echo "Running build for sample='$SAMPLE', soc='$SOC', revision='$REV' with CMAKE_EXTRA='$CMAKE_EXTRA' in workspace_dir='$WORKSPACE_DIR'…"
 cd "$WORKSPACE_DIR"
 
 if [ ! -d "samples/$SAMPLE" ]; then
@@ -50,13 +51,24 @@ fi
 # the manifest by clearing the env var.
 # unset ZEPHYR_BASE
 
-# if [ ! -d .west ]; then
-west init -l prstlib
-west update -o=--depth=1 -n
-pip install \
-  -r zephyr/scripts/requirements.txt \
-  -r nrf/scripts/requirements.txt
-# fi
+echo "Building sample '$SAMPLE' for SOC '$SOC' revision '$REV' with CMAKE_EXTRA='$CMAKE_EXTRA'…"
+echo workspace_dir="$WORKSPACE_DIR"
+if [ -n "${ZEPHYR_BASE:-}" ]; then
+  echo "warning: ZEPHYR_BASE is set to '$ZEPHYR_BASE', west may not find the Zephyr module in the manifest"
+else
+  echo "ZEPHYR_BASE is not set, west should find the Zephyr module in the manifest"
+fi
+
+if [ ! -d .west ]; then
+  echo "Initializing west workspace and installing Python dependencies…"
+  west init -l prstlib
+  west update -o=--depth=1 -n
+  # pip install \
+  #   -r zephyr/scripts/requirements.txt \
+  #   -r nrf/scripts/requirements.txt
+else
+  echo "West workspace already initialized, skipping west init/update and Python dependencies installation"
+fi
 
 west build --pristine \
   --build-dir "samples/$SAMPLE/build_${SOC}_${REV}" \
