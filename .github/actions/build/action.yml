@@ -60,7 +60,7 @@ runs:
       uses: zephyrproject-rtos/action-zephyr-setup@v1
       with:
         app-path: ncs-manifest
-        toolchains: 'arm-zephyr-eabi'
+        toolchains: "arm-zephyr-eabi"
     - name: Build
       shell: bash
       run: |
@@ -72,3 +72,11 @@ runs:
           -DBOARD_ROOT=${{ github.workspace }}/code/nrf-connect/prstlib \
           -DDTS_ROOT=${{ github.workspace }}/code/nrf-connect/prstlib \
           ${{ inputs.cmake-extra }}
+    - name: Upload artifact
+      if: inputs.output-bin != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.output-bin }}
+        path: artifacts/${{ inputs.output-bin }}
+        if-no-files-found: error
+        retention-days: 30
