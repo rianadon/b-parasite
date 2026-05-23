@@ -19,16 +19,24 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Resolve build dir
+      id: paths
+      shell: bash
+      run: echo "build_dir=code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}" >> "$GITHUB_OUTPUT"
     - name: Build
       shell: bash
       env:
         CMAKE_EXTRA: ${{ inputs.cmake-extra }}
       run: code/scripts/build.sh "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}"
+    - name: Prepare artifact
+      if: inputs.output-bin != ''
+      shell: bash
+      run: cp "${{ steps.paths.outputs.build_dir }}/merged.hex" "${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}"
     - name: Upload artifact
       if: inputs.output-bin != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
-        name: ${{ inputs.output-bin }}
-        path: code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}/merged.hex
+        path: ${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}
+        archive: false
         if-no-files-found: error
         retention-days: 30
