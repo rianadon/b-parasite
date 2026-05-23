@@ -148,6 +148,4 @@ jobs:
         with:
           generate_release_notes: true
           draft: true
-          files: |
-            artifacts/*
-            artifacts/SHA256SUMS.txt
+          files: artifacts/*
