@@ -46,11 +46,6 @@ if [ ! -d "samples/$SAMPLE" ]; then
   exit 1
 fi
 
-# The Zephyr CI image bakes in ZEPHYR_BASE=/workspace/zephyr for its canonical
-# layout. Our workspace topdir is code/, so let west rediscover zephyr from
-# the manifest by clearing the env var.
-# unset ZEPHYR_BASE
-
 echo "Building sample '$SAMPLE' for SOC '$SOC' revision '$REV' with CMAKE_EXTRA='$CMAKE_EXTRA'…"
 echo workspace_dir="$WORKSPACE_DIR"
 if [ -n "${ZEPHYR_BASE:-}" ]; then
@@ -62,10 +57,10 @@ fi
 if [ ! -d .west ]; then
   echo "Initializing west workspace and installing Python dependencies…"
   west init -l prstlib
-  west update -o=--depth=1 -n
-  # pip install \
-  #   -r zephyr/scripts/requirements.txt \
-  #   -r nrf/scripts/requirements.txt
+  west update --narrow --fetch-opt=--depth=1
+  pip install \
+    -r zephyr/scripts/requirements.txt \
+    -r nrf/scripts/requirements.txt
 else
   echo "West workspace already initialized, skipping west init/update and Python dependencies installation"
 fi
