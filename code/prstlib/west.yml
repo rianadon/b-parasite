@@ -1,0 +1,19 @@
+manifest:
+  remotes:
+    - name: nrfconnect
+      url-base: https://github.com/nrfconnect
+  projects:
+    # - name: nrf
+    #   repo-path: sdk-nrf
+    #   remote: nrfconnect
+    #   revision: v3.3.0
+    #   import: true
+    # ncs-zigbee @ 15854504b47cb8c84f4f07ddc716c9d77e4b9238 transitively imports sdk-nrf v3.3.0.
+    # https://github.com/nrfconnect/ncs-zigbee/blob/15854504b47cb8c84f4f07ddc716c9d77e4b9238/west.yml#L13
+    # TODO: use groups to avoid importing the whole ncs-zigbee for every sample build.
+    - name: ncs-zigbee
+      remote: nrfconnect
+      revision: 15854504b47cb8c84f4f07ddc716c9d77e4b9238
+      import: true
+  self:
+    path: prstlib

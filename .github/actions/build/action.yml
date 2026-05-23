@@ -1,8 +1,8 @@
 name: "Build"
 description: "Builds a nrf-connect sample for b-parasite"
 inputs:
-  sample-dir:
-    description: "Sample directory to build"
+  sample:
+    description: "Sample name (blinky, input, ble, soil-read-loop, zigbee)"
     required: true
   soc:
     description: "SoC to use"
@@ -16,59 +16,27 @@ inputs:
   output-bin:
     description: "Output binary filename for the artifact"
     default: ""
-  zigbee:
-    description: "Include ncs-zigbee add-on in the west workspace"
-    default: "false"
 runs:
   using: "composite"
   steps:
-    - name: Create NCS workspace manifest
+    - name: Resolve build dir
+      id: paths
       shell: bash
-      run: |
-        mkdir -p ${{ github.workspace }}/ncs-manifest
-        if [ "${{ inputs.zigbee }}" = "true" ]; then
-          {
-            echo 'manifest:'
-            echo '  remotes:'
-            echo '    - name: nrfconnect'
-            echo '      url-base: https://github.com/nrfconnect'
-            echo '  projects:'
-            echo '    - name: ncs-zigbee'
-            echo '      remote: nrfconnect'
-            echo '      revision: main'
-            echo '      import: true'
-            echo '  self:'
-            echo '    path: ncs-manifest'
-          } > ${{ github.workspace }}/ncs-manifest/west.yml
-        else
-          {
-            echo 'manifest:'
-            echo '  remotes:'
-            echo '    - name: nrfconnect'
-            echo '      url-base: https://github.com/nrfconnect'
-            echo '  projects:'
-            echo '    - name: nrf'
-            echo '      repo-path: sdk-nrf'
-            echo '      remote: nrfconnect'
-            echo '      revision: v3.3.0'
-            echo '      import: true'
-            echo '  self:'
-            echo '    path: ncs-manifest'
-          } > ${{ github.workspace }}/ncs-manifest/west.yml
-        fi
-    - name: Setup NCS
-      uses: zephyrproject-rtos/action-zephyr-setup@v1
-      with:
-        app-path: ncs-manifest
-        toolchains: 'arm-zephyr-eabi'
+      run: echo "build_dir=code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}" >> "$GITHUB_OUTPUT"
     - name: Build
       shell: bash
-      run: |
-        west build \
-          --build-dir ${{ github.workspace }}/${{ inputs.sample-dir }}/build_${{ inputs.soc }}_${{ inputs.revision }} \
-          --pristine \
-          --board bparasite@${{ inputs.revision }}/${{ inputs.soc }} \
-          ${{ github.workspace }}/${{ inputs.sample-dir }} -- \
-          -DBOARD_ROOT=${{ github.workspace }}/code/nrf-connect/prstlib \
-          -DDTS_ROOT=${{ github.workspace }}/code/nrf-connect/prstlib \
-          ${{ inputs.cmake-extra }}
+      env:
+        CMAKE_EXTRA: ${{ inputs.cmake-extra }}
+      run: code/scripts/build.sh "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}"
+    - name: Prepare artifact
+      if: inputs.output-bin != ''
+      shell: bash
+      run: cp "${{ steps.paths.outputs.build_dir }}/merged.hex" "${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}"
+    - name: Upload artifact
+      if: inputs.output-bin != ''
+      uses: actions/upload-artifact@v7
+      with:
+        path: ${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}
+        archive: false
+        if-no-files-found: error
+        retention-days: 30
