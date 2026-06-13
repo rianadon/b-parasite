@@ -1,0 +1,17 @@
+/*
+ * Route Zephyr's console to a USB CDC ACM virtual UART so we can see which
+ * sensor read (or BLE init step) is failing on a board with no UART pads.
+ */
+&usbd {
+	status = "okay";
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+/ {
+	chosen {
+		zephyr,console = &cdc_acm_uart0;
+		zephyr,shell-uart = &cdc_acm_uart0;
+	};
+};

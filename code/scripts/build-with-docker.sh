@@ -2,6 +2,10 @@
 # Thin wrapper: runs scripts/build.sh inside the Zephyr CI docker image,
 # the same image used by GitHub Actions. The first run clones the NCS
 # workspace (sdk-nrf, zephyr, modules, …) into code/; subsequent runs reuse it.
+#
+# All arguments are forwarded verbatim to scripts/build.sh, so
+#   ./scripts/build-with-docker.sh blinky nrf52840 2.0.0ry1 --uf2
+# produces a zephyr.uf2 next to zephyr.hex in the build dir.
 set -euo pipefail
 
 if [[ "$(uname -m)" == "arm64" ]]; then

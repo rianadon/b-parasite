@@ -1,0 +1,104 @@
+/ {
+	photo_transistor: photo_transistor {
+		compatible = "voltage-divider";
+		output-ohms = <470>;
+		io-channels = <&adc 1>;
+	};
+
+	soil_calibration_coeffs: soil_calibration_coeffs {
+		compatible = "soil-calibration-coeffs";
+		dry = <334000 110000 (-15300)>;
+		wet = <299000 (-83100) 11200>;
+	};
+
+	ctrl {
+		compatible = "gpio-keys";
+		photo_transistor_enable: photo_transistor_enable {
+			// P0.02.
+			gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+			label = "Phototransistor supply";
+		};
+	};
+};
+
+&led0 {
+	// P1.09.
+	gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+};
+
+&button0 {
+	// P0.12.
+	gpios = <&gpio0 12 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+};
+
+&adc {
+	// Soil moved to AIN2 (P0.04).
+	channel@0 {
+		zephyr,input-positive = <NRF_SAADC_AIN2>;
+	};
+
+	// Phototransistor on AIN5 (P0.29).
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1_6";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		// P0.29.
+		zephyr,input-positive = <NRF_SAADC_AIN5>;
+		zephyr,resolution = <10>;
+	};
+};
+
+/*
+ * Flash layout for the Adafruit nRF52840 UF2 bootloader:
+ *   0x000000 - 0x001000  MBR
+ *   0x001000 - 0x026000  SoftDevice region (reserved even if unused)
+ *   0x026000 - 0x0F4000  Application (~824 KiB) <- slot0_partition
+ *   0x0F4000 - 0x100000  Adafruit UF2 bootloader
+ * MCUboot dual-slot layout is dropped — the UF2 bootloader is the only one.
+ */
+&boot_partition {
+	label = "softdevice-reserved";
+	reg = <0x00000000 0x00026000>;
+};
+
+&slot0_partition {
+	reg = <0x00026000 0x000ce000>;
+};
+
+/delete-node/ &slot1_partition;
+/delete-node/ &scratch_partition;
+/delete-node/ &storage_partition;
+
+&pinctrl {
+	/* Soil PWM moved to P0.08. */
+	pwm0_default {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 8)>;
+			nordic,invert;
+		};
+	};
+
+	pwm0_sleep {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 8)>;
+			low-power-enable;
+		};
+	};
+
+	/* I2C SDA moved to P0.15; SCL stays on P0.13. */
+	i2c0_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 15)>,
+							<NRF_PSEL(TWIM_SCL, 0, 13)>;
+		};
+	};
+
+	i2c0_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 15)>,
+							<NRF_PSEL(TWIM_SCL, 0, 13)>;
+			low-power-enable;
+		};
+	};
+};
