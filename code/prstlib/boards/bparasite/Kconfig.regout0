@@ -1,0 +1,37 @@
+# UICR.REGOUT0 voltage selection for nRF52840 high-voltage mode.
+# board.c reads this choice at boot and programs UICR if needed.
+
+choice
+	prompt "REGOUT0 voltage (VDD when high-voltage mode is active)"
+	default BPARASITE_REGOUT0_DEFAULT
+	depends on BOARD_BPARASITE_NRF52840
+	help
+	  Selects the regulated VDD output when the chip is in high-voltage
+	  mode (VDDH is the supply, e.g. CR2032 on VDDH). board.c writes
+	  UICR.REGOUT0 on first boot, or re-programs it (full UICR snapshot
+	  + erase + restore) when the build choice changes. Has no effect
+	  when the chip is in normal-voltage mode (VDD tied directly to the
+	  supply).
+
+config BPARASITE_REGOUT0_DEFAULT
+	bool "Chip default (1.8 V)"
+	help
+	  Don't program UICR. Chip stays at factory default (1.8 V in HV
+	  mode, supply voltage in NV mode).
+
+config BPARASITE_REGOUT0_2V1
+	bool "2.1 V — best CR2032 life, red LED OK at Vf ≈ 1.85 V"
+
+config BPARASITE_REGOUT0_2V4
+	bool "2.4 V — balanced, BLE up to +4 dBm"
+
+config BPARASITE_REGOUT0_2V7
+	bool "2.7 V — BLE +4 dBm with headroom"
+
+config BPARASITE_REGOUT0_3V0
+	bool "3.0 V — only with USB / boosted VDDH"
+
+config BPARASITE_REGOUT0_3V3
+	bool "3.3 V — only with USB / boosted VDDH"
+
+endchoice

@@ -8,6 +8,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "prstlib/board_regulator.h"
 #include "prstlib/macros.h"
 
 LOG_MODULE_REGISTER(adc, CONFIG_PRSTLIB_LOG_LEVEL);
@@ -118,6 +119,10 @@ static int read_adc_spec(const struct adc_dt_spec* spec, prst_adc_read_t* out) {
 }
 
 int prst_adc_init() {
+  // Run before anything reads the ADC: programs UICR.REGOUT0 if the build
+  // selected a non-default VDD, triggering a reset to apply it.
+  prst_board_regulator_init();
+
   RET_IF_ERR(adc_channel_setup_dt(&adc_soil_spec));
   RET_IF_ERR(adc_channel_setup_dt(&adc_batt_spec));
 
@@ -145,6 +150,10 @@ int prst_adc_init() {
 
 int prst_adc_batt_read(prst_batt_t* out) {
   RET_IF_ERR(read_adc_spec(&adc_batt_spec, &out->adc_read));
+  // When the battery channel samples VDDH/5 instead of VDD, scale back up
+  // so downstream code sees the true battery voltage.
+  out->adc_read.millivolts *= CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER;
+  out->adc_read.voltage    *= CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER;
   set_battery_percent(&out->adc_read, out);
   return 0;
 }
@@ -172,10 +181,11 @@ int prst_adc_photo_read(float battery_voltage, prst_adc_photo_sensor_t* out) {
   RET_IF_ERR(read_adc_spec(&adc_photo_transistor_spec, &out->adc_read));
   RET_IF_ERR(gpio_pin_set_dt(&photo_transistor_enable_dt, 0));
   const float phototransistor_resistor = DT_PROP(DT_NODELABEL(photo_transistor), output_ohms);
-  // Assuming 10000 lux for the saturation test. Calibration with a proper light
-  // meter would be better.
-  const float lux_sun = 10000.0f;
-  const float current_sun = 3.59e-3f;
+  // Linear calibration: lux ≈ (V_adc / R) * lux_sun / current_sun.
+  // Both knobs are CONFIG_* so the curve can be re-fit per board / VDD
+  // without recompiling this file.
+  const float lux_sun = (float)CONFIG_PRSTLIB_PHOTO_LUX_SUN;
+  const float current_sun = (float)CONFIG_PRSTLIB_PHOTO_CURRENT_SUN_UA / 1.0e6f;
   const float current = out->adc_read.voltage / phototransistor_resistor;
   out->brightness = MAX(0, MIN(lux_sun * current / current_sun, UINT16_MAX));
   LOG_DBG("Read phototransistor: %u lx | %.2f V", out->brightness, DOUBLE_PROMO_OK(out->adc_read.voltage));

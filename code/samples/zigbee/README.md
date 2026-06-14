@@ -48,6 +48,64 @@ With the [ZHA](https://www.home-assistant.io/integrations/zha) Home Assistant in
 ### Zigbee2MQTT & Home Assistant
 With [Zigbee2MQTT](https://zigbee2mqtt.io/), a custom converter is required. The [b-parasite.js](b-parasite.js) file contains such a converter. See [Support new devices](https://www.zigbee2mqtt.io/advanced/support-new-devices/01_support_new_devices.html) for instructions.
 
+## Building
+
+The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the Zephyr CI container (use [`build-with-docker.sh`](../../scripts/build-with-docker.sh) or `alias docker=podman` first).
+
+### Selecting the regulated VDD (`REGOUT0`)
+
+Same `CONFIG_BPARASITE_REGOUT0_*` Kconfig choice as the ble sample — see [`samples/ble/README.md`](../ble/README.md#selecting-the-regulated-vdd-regout0) for the full voltage trade-off table. Pass via `-DCONFIG_BPARASITE_REGOUT0_2V1=y` (or another value).
+
+**Note on Zigbee radio TX power:** unlike BLE, the board defconfig does *not* auto-cap 802.15.4 TX power based on REGOUT0. ZBOSS in NCS routes TX power through its own path (`zb_set_tx_power()` API at runtime) rather than `CONFIG_NET_L2_IEEE802154_RADIO_DFLT_TX_POWER`. If you run at 2.1 V VDD, set the Zigbee stack TX power to 0 dBm at boot from C code, otherwise the radio may try to transmit at +8 dBm and trip a brownout.
+
+### Partition layout
+
+NCS Zigbee NVRAM (`ncs-zigbee/subsys/osif/zb_nrf_nvram.c`) hard-includes `pm_config.h`, so unlike the other samples we can't disable Partition Manager. Instead, [`pm_static.yml`](./pm_static.yml) pins the partitions to match the Adafruit UF2 bootloader:
+
+| Region | Range | Purpose |
+|---|---|---|
+| `softdevice_reserved` | 0x000000–0x026000 | MBR + SoftDevice slot (reserved, unused) |
+| `app` | 0x026000–0x0EC000 | 792 KiB application image |
+| `settings_storage` | 0x0EC000–0x0F4000 | 32 KiB LittleFS for ZBOSS network credentials |
+| `uf2_bootloader_reserved` | 0x0F4000–0x100000 | Adafruit UF2 bootloader (don't touch) |
+
+The build script auto-detects `--uf2 zigbee` and leaves PM enabled.
+
+### Production build (deploy to battery)
+
+Default `prj.conf` settings: 60-s sleep cadence between sensor reads, 10-s parent poll interval, SEGGER RTT for diagnostics (works with a J-Link, otherwise silently no-op), no USB.
+
+```
+./scripts/build-with-docker.sh zigbee nrf52840 2.0.0ry1 --uf2 \
+  -DCONFIG_BPARASITE_REGOUT0_2V1=y
+```
+
+Output: `samples/zigbee/build_nrf52840_2.0.0ry1/zigbee/zephyr/zephyr.uf2` (~825 KB).
+
+### Development build (bring-up, logs over USB)
+
+Adds [`dev.conf`](./dev.conf) + [`dev.overlay`](./dev.overlay) on top of `prj.conf`:
+
+- USB CDC ACM virtual UART → console + log destination (no J-Link needed)
+- SEGGER RTT disabled (saves RAM, USB CDC is the active path)
+- `CONFIG_PRST_ZB_SLEEP_DURATION_SEC=10` (every 10 s instead of 60 s)
+- `CONFIG_LOG_DEFAULT_LEVEL=4` (verbose) + `CONFIG_PRSTLIB_LOG_LEVEL_DBG=y`
+
+```
+./scripts/build-with-docker.sh zigbee nrf52840 2.0.0ry1 --uf2 --dev \
+  -DCONFIG_BPARASITE_REGOUT0_2V1=y
+```
+
+Output: `samples/zigbee/build_nrf52840_2.0.0ry1_dev/zigbee/zephyr/zephyr-dev.uf2` (~903 KB).
+
+The dev build lives in its own `_dev` build directory and the UF2 is renamed `zephyr-dev.uf2`, so dev and prod artifacts never overwrite each other. Don't deploy dev to battery — USB + tight loop wreck CR2032 life.
+
+After flashing dev, find the CDC port: `ls /dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux), then `screen /dev/cu.usbmodemXXXX 115200`.
+
+### Legacy `prj_debug.conf`
+
+The earlier debug config at [`prj_debug.conf`](./prj_debug.conf) predates the `--dev` flag and is no longer wired into the build script. It's kept for reference — `dev.conf` is the supported path.
+
 ## Battery Life
 While sleeping, the device consumes around 2 uA:
 ![sleeping current](./media/power-profile/sleeping.png)

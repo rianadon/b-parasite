@@ -1,0 +1,34 @@
+# Static Partition Manager layout for zigbee + Adafruit UF2 bootloader on
+# bparasite/nrf52840 revision 2.0.0ry1.
+#
+# NCS Zigbee (zb_nrf_nvram) requires Partition Manager to be enabled so
+# pm_config.h gets generated, so we can't use the PM-disabled / DT-driven
+# layout that ble/blinky/input use. Instead we keep PM on and pin the
+# partitions explicitly:
+#
+#   0x000000 - 0x026000  reserved (MBR + SoftDevice region)
+#   0x026000 - 0x0EC000  app image-0  (792 KiB)
+#   0x0EC000 - 0x0F4000  settings_storage  (32 KiB, ZBOSS NVRAM)
+#   0x0F4000 - 0x100000  Adafruit UF2 bootloader (off-limits)
+
+softdevice_reserved:
+  address: 0x0
+  size: 0x26000
+  region: flash_primary
+
+app:
+  address: 0x26000
+  size: 0xc6000
+  region: flash_primary
+
+settings_storage:
+  address: 0xec000
+  size: 0x8000
+  region: flash_primary
+  placement:
+    after: [app]
+
+uf2_bootloader_reserved:
+  address: 0xf4000
+  size: 0xc000
+  region: flash_primary

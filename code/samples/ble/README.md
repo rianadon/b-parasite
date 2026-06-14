@@ -35,6 +35,91 @@ The disadvantages of this encoding are:
 - Each b-parasite has to be configured in the ESPHome component
 - Range is limited, unless multiple ESPHome bridges are deployed with the same static configuration
 
+## Building
+
+The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the same Zephyr CI container that GitHub Actions uses. A wrapper at [`code/scripts/build-with-docker.sh`](../../scripts/build-with-docker.sh) handles the container — replace `docker` with `podman` if that's what you have, or `alias docker=podman` first.
+
+```
+usage: build.sh <sample> [soc] [revision] [--uf2] [--dev]
+```
+
+### Selecting the regulated VDD (`REGOUT0`)
+
+On board revision `2.0.0ry1` the CR2032 is wired to `VDDH` and `VDD` is the regulated output of the chip's internal LDO/DC-DC. `UICR.REGOUT0` sets the output voltage. The firmware reads `CONFIG_BPARASITE_REGOUT0_*` at boot, programs UICR if it doesn't match, and resets — so the choice baked into your UF2 *is* the chip's runtime VDD.
+
+Pick one (applies to both production and development builds, pass via `-DCONFIG_BPARASITE_REGOUT0_*V*=y`):
+
+| Kconfig | VDD | BLE TX cap | Best for | CR2032 life (realistic) |
+|---|---|---|---|---|
+| `REGOUT0_DEFAULT` | 1.8 V (chip default) | 0 dBm | LED-less / IR LED only | ~3.5 yr |
+| **`REGOUT0_2V1`** | **2.1 V** | **0 dBm** | **indoor planter, red LED at Vf ≤ 1.95 V — recommended default** | **~2.5–3.7 yr** |
+| `REGOUT0_2V4` | 2.4 V | +4 dBm | balanced indoor/outdoor, more BLE range, cold-weather LED headroom | ~2.0–3.0 yr |
+| `REGOUT0_2V7` | 2.7 V | +4 dBm | needs full BLE +4 dBm, low headroom on CR2032 — regulator dropouts when battery < 2.85 V | ~1.5–2.0 yr |
+| `REGOUT0_3V0` | 3.0 V | +8 dBm | **USB / boosted VDDH only** — regulator dropouts immediately on CR2032 | n/a on CR2032 |
+| `REGOUT0_3V3` | 3.3 V | +8 dBm | **USB / boosted VDDH only** | n/a on CR2032 |
+
+The choice also auto-configures `CONFIG_BT_CTLR_TX_PWR_*` (radio output cap — see [`prstlib/boards/bparasite/Kconfig.defconfig`](../../prstlib/boards/bparasite/Kconfig.defconfig)) and `CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER` (× 5 when sampling VDDH/5 for battery, automatic for any non-DEFAULT choice).
+
+#### Why not just stay at 3.3 V?
+
+A CR2032 sits at ~3.0 V open-circuit and sags to ~2.7–2.85 V under TX-pulse load. The internal regulator needs ~150 mV of headroom — so anything ≥ 2.7 V dropouts under load and the chip effectively runs *unregulated* at the battery voltage, which (a) wastes the DC-DC step-down efficiency win, (b) gives sliding TX power as the battery droops, (c) makes ADC readings drift with V_bat. **2.1 V is the right answer for a CR2032 sensor that lives near a Home Assistant gateway.**
+
+#### Required hardware
+
+The chip enters high-voltage mode (where `REGOUT0` matters) only when `VDDH > VDD`. If your schematic has `VDD` and `VDDH` tied together (or both wired to the battery), `MAINREGSTATUS == NORMAL`, the firmware short-circuits, and you see V_bat on VDD regardless of UICR. The 2.0.0ry1 board layout assumes:
+
+- `VDDH` ← CR2032 (+) + decoupling caps
+- `VDD` ← decoupling cap to GND only
+- `DEC4` ← inductor + cap (for DC-DC mode)
+
+If you've measured 2.97 V on VDD running on battery and a UF2 that should have written `REGOUT0=2.1`, the schematic is the culprit. See [`prstlib/src/board_regout0.c`](../../prstlib/src/board_regout0.c) for the boot-time hook that gates on `MAINREGSTATUS`.
+
+### Production build (deploy to battery)
+
+Default `prj.conf` settings: 10-min wake cadence, 1-s advertise window, no USB stack, no logging. Pair with the `2.0.0ry1` board revision (CR2032 wired to VDDH) and pick a `REGOUT0` voltage that matches your hardware (see [`prstlib/boards/bparasite/Kconfig.regout0`](../../prstlib/boards/bparasite/Kconfig.regout0)).
+
+```
+./scripts/build-with-docker.sh ble nrf52840 2.0.0ry1 --uf2 \
+  -DCONFIG_BPARASITE_REGOUT0_2V1=y
+```
+
+Output: `samples/ble/build_nrf52840_2.0.0ry1/ble/zephyr/zephyr.uf2` (~400 KB).
+
+The `CONFIG_BPARASITE_REGOUT0_*` choice determines:
+- `UICR.REGOUT0` programming at first boot (firmware reflashes the chip if VDD doesn't match) — see [`prstlib/src/board_regout0.c`](../../prstlib/src/board_regout0.c).
+- BLE TX power cap (board defaults to `BT_CTLR_TX_PWR_0` at 2.1 V, `_PLUS_4` at 2.4–2.7 V, `_PLUS_8` at 3.0–3.3 V).
+- Battery ADC divider (`PRSTLIB_BATT_VOLTAGE_DIVIDER`) — set to 5 when the 2.0.0ry1 overlay samples `NRF_SAADC_VDDHDIV5`.
+
+To flash: double-tap reset → drag the `.uf2` onto the `BPARASITE` USB drive.
+
+### Development build (bring-up, sensor calibration, debugging)
+
+Same command + `--dev`. This applies [`samples/ble/dev.conf`](./dev.conf) and [`samples/ble/dev.overlay`](./dev.overlay) on top of `prj.conf`:
+
+- USB CDC ACM virtual UART → console + log destination
+- `PRST_SLEEP_DURATION_MSEC = 5000` (5-s wake cadence — advertises every ~6 s)
+- `PRST_BLE_ADV_DURATION_MSEC = 1000` (1-s adv window)
+- `PRSTLIB_LOG_LEVEL_DBG=y` (per-sensor debug logs)
+
+```
+./scripts/build-with-docker.sh ble nrf52840 2.0.0ry1 --uf2 --dev \
+  -DCONFIG_BPARASITE_REGOUT0_2V1=y
+```
+
+Output: `samples/ble/build_nrf52840_2.0.0ry1_dev/ble/zephyr/zephyr-dev.uf2` (~445 KB).
+
+The dev build lives in a separate build dir (`_dev` suffix) and the UF2 is renamed `zephyr-dev.uf2`, so dev and prod artifacts never overwrite each other.
+
+After flashing, the board enumerates as a USB CDC ACM device (look for `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on Linux). Open it with any terminal: `screen /dev/cu.usbmodemXXXX 115200`.
+
+Don't deploy a dev build to battery — USB and the 5-s loop drain a CR2032 in days, not years.
+
+### Other targets
+
+- `./scripts/build-with-docker.sh blinky nrf52840 2.0.0ry1 --uf2` — LED blink smoke test
+- `./scripts/build-with-docker.sh input nrf52840 2.0.0ry1 --uf2` — button + LED test
+- `./scripts/build-with-docker.sh soil-read-loop nrf52840 2.0.0ry1 --uf2` — analog chain debug (already configured for USB CDC logging by default)
+
 ## Battery Life
 **tl;dr**: Theoretically well over two years with default settings.
 

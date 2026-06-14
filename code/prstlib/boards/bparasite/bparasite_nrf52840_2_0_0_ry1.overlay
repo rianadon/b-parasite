@@ -47,6 +47,14 @@
 		zephyr,input-positive = <NRF_SAADC_AIN5>;
 		zephyr,resolution = <10>;
 	};
+
+	// Battery monitoring via VDDH/5 instead of VDD. When this board runs in
+	// high-voltage mode (CR2032 → VDDH, VDD regulated by UICR.REGOUT0), VDD
+	// reports the regulated rail, not the battery. VDDHDIV5 samples the
+	// battery directly; firmware multiplies by CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER.
+	channel@2 {
+		zephyr,input-positive = <NRF_SAADC_VDDHDIV5>;
+	};
 };
 
 /*
@@ -62,13 +70,23 @@
 	reg = <0x00000000 0x00026000>;
 };
 
+/*
+ * App image-0: 0x26000 – 0xEC000 (792 KiB).
+ * Storage:     0xEC000 – 0xF4000 (32 KiB) — used by the zigbee sample's
+ *              LittleFS for network credentials so the device doesn't
+ *              re-join after every power cycle. Inside the app region,
+ *              clear of the Adafruit bootloader at 0xF4000+.
+ */
 &slot0_partition {
-	reg = <0x00026000 0x000ce000>;
+	reg = <0x00026000 0x000c6000>;
+};
+
+&storage_partition {
+	reg = <0x000ec000 0x00008000>;
 };
 
 /delete-node/ &slot1_partition;
 /delete-node/ &scratch_partition;
-/delete-node/ &storage_partition;
 
 &pinctrl {
 	/* Soil PWM moved to P0.08. */

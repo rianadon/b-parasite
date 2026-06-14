@@ -1,5 +1,6 @@
 add_library(prstlib STATIC
 	src/adc.c
+	src/board_regout0.c
 	src/button.c
 	src/led.c
 	src/sensors.c

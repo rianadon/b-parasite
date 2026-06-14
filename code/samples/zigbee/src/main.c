@@ -7,6 +7,7 @@
 #include <prstlib/shtc3.h>
 #include <ram_pwrdn.h>
 #include <zb_nrf_platform.h>
+#include <zb_transceiver.h>
 #include <zboss_api.h>
 #include <zboss_api_addons.h>
 #include <zcl/zb_zcl_power_config.h>
@@ -324,6 +325,23 @@ int main(void) {
   zigbee_configure_sleepy_behavior(/*enable=*/true);
   power_down_unused_ram();
   zigbee_enable();
+
+  // Cap 802.15.4 TX power based on the regulated VDD. Higher TX power
+  // needs more VDD headroom: +8 dBm requires VDD ≳ 2.7 V under TX peaks,
+  // +4 dBm needs ≳ 2.4 V, otherwise the radio browns out under load.
+  // ZBOSS gates the public zb_set_tx_power() behind ZB_OSIF_CONFIGURABLE_TX_POWER
+  // which isn't enabled in NCS, so we hit the OSIF wrapper directly —
+  // it stores the value in the nrf_802154 driver state and the next TX
+  // burst picks it up.
+#if CONFIG_BPARASITE_REGOUT0_3V0 || CONFIG_BPARASITE_REGOUT0_3V3
+  zb_trans_set_tx_power(8);
+#elif CONFIG_BPARASITE_REGOUT0_2V4 || CONFIG_BPARASITE_REGOUT0_2V7
+  zb_trans_set_tx_power(4);
+#else
+  // 1.8 V (DEFAULT) or 2.1 V: stay at 0 dBm. Anything higher risks
+  // brownouts during TX bursts on a CR2032.
+  zb_trans_set_tx_power(0);
+#endif
 
   prst_debug_counters_increment("main_finish");
 

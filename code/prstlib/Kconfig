@@ -1,3 +1,34 @@
 module = PRSTLIB
 module-str = prstlib
 source "subsys/logging/Kconfig.template.log_config"
+
+config PRSTLIB_BATT_VOLTAGE_DIVIDER
+	int "Battery ADC voltage divider ratio"
+	default 1
+	help
+	  Multiplier applied to the battery ADC reading to recover the true
+	  battery voltage. Set to 5 when the battery channel samples
+	  NRF_SAADC_VDDHDIV5 (i.e. when the board runs in high-voltage mode
+	  with VDD regulated below VDDH). Leave at 1 when the channel samples
+	  NRF_SAADC_VDD directly.
+
+menu "Phototransistor calibration"
+
+config PRSTLIB_PHOTO_LUX_SUN
+	int "Reference lux value for current_sun calibration point"
+	default 10000
+	help
+	  Illuminance (in lux) at which PRSTLIB_PHOTO_CURRENT_SUN_UA of
+	  photocurrent is expected. Calibration is linear from there:
+	  brightness_lux = (V_adc / R_output) * lux_sun / current_sun.
+
+config PRSTLIB_PHOTO_CURRENT_SUN_UA
+	int "Photocurrent at PRSTLIB_PHOTO_LUX_SUN, in microamps"
+	default 3590
+	help
+	  Default 3590 µA corresponds to the original b-parasite phototransistor
+	  characterized at 3.3 V drive. Recalibrate when VDD changes (e.g. when
+	  using UICR.REGOUT0 to drop VDD to 2.1 V or 2.4 V) — the photocurrent
+	  at the same illuminance scales with the drive voltage.
+
+endmenu
