@@ -58,7 +58,7 @@ Pick one (applies to both production and development builds, pass via `-DCONFIG_
 | `REGOUT0_3V0` | 3.0 V | +8 dBm | **USB / boosted VDDH only** — regulator dropouts immediately on CR2032 | n/a on CR2032 |
 | `REGOUT0_3V3` | 3.3 V | +8 dBm | **USB / boosted VDDH only** | n/a on CR2032 |
 
-The choice also auto-configures `CONFIG_BT_CTLR_TX_PWR_*` (radio output cap — see [`prstlib/boards/bparasite/Kconfig.defconfig`](../../prstlib/boards/bparasite/Kconfig.defconfig)) and `CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER` (× 5 when sampling VDDH/5 for battery, automatic for any non-DEFAULT choice).
+The choice also drives `CONFIG_PRSTLIB_RADIO_TX_PWR_DBM` (an int — 0, 4, or 8 dBm — single source of truth used by both BLE and zigbee), which in turn sets the `CONFIG_BT_CTLR_TX_PWR_*` choice. See [`prstlib/boards/bparasite/Kconfig.defconfig`](../../prstlib/boards/bparasite/Kconfig.defconfig). To override TX power without changing REGOUT0, pass `-DCONFIG_PRSTLIB_RADIO_TX_PWR_DBM=N`. Also auto-configured: `CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER` (× 5 when sampling VDDH/5 for battery, automatic for any non-DEFAULT choice).
 
 #### Why not just stay at 3.3 V?
 
@@ -87,14 +87,14 @@ Output: `samples/ble/build_nrf52840_2.0.0ry1/ble/zephyr/zephyr.uf2` (~400 KB).
 
 The `CONFIG_BPARASITE_REGOUT0_*` choice determines:
 - `UICR.REGOUT0` programming at first boot (firmware reflashes the chip if VDD doesn't match) — see [`prstlib/src/board_regout0.c`](../../prstlib/src/board_regout0.c).
-- BLE TX power cap (board defaults to `BT_CTLR_TX_PWR_0` at 2.1 V, `_PLUS_4` at 2.4–2.7 V, `_PLUS_8` at 3.0–3.3 V).
+- Radio TX power (`PRSTLIB_RADIO_TX_PWR_DBM` defaults to 0 at 1.8–2.1 V, 4 at 2.4–2.7 V, 8 at 3.0–3.3 V; BLE picks its `BT_CTLR_TX_PWR_*` choice from this int, zigbee passes it to `zb_trans_set_tx_power()`).
 - Battery ADC divider (`PRSTLIB_BATT_VOLTAGE_DIVIDER`) — set to 5 when the 2.0.0ry1 overlay samples `NRF_SAADC_VDDHDIV5`.
 
 To flash: double-tap reset → drag the `.uf2` onto the `BPARASITE` USB drive.
 
 ### Development build (bring-up, sensor calibration, debugging)
 
-Same command + `--dev`. This applies [`samples/ble/dev.conf`](./dev.conf) and [`samples/ble/dev.overlay`](./dev.overlay) on top of `prj.conf`:
+Same command + `--dev`. This applies the [`dev`](./snippets/dev/) Zephyr snippet (USB CDC ACM console + faster wake cadence + debug logs) on top of `prj.conf`:
 
 - USB CDC ACM virtual UART → console + log destination
 - `PRST_SLEEP_DURATION_MSEC = 5000` (5-s wake cadence — advertises every ~6 s)
@@ -106,9 +106,9 @@ Same command + `--dev`. This applies [`samples/ble/dev.conf`](./dev.conf) and [`
   -DCONFIG_BPARASITE_REGOUT0_2V1=y
 ```
 
-Output: `samples/ble/build_nrf52840_2.0.0ry1_dev/ble/zephyr/zephyr-dev.uf2` (~445 KB).
+Output: `samples/ble/build_nrf52840_2.0.0ry1_dev/ble/zephyr/zephyr.uf2` (~445 KB).
 
-The dev build lives in a separate build dir (`_dev` suffix) and the UF2 is renamed `zephyr-dev.uf2`, so dev and prod artifacts never overwrite each other.
+The dev build lives in a separate build dir (`_dev` suffix), so dev and prod artifacts never overwrite each other.
 
 After flashing, the board enumerates as a USB CDC ACM device (look for `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on Linux). Open it with any terminal: `screen /dev/cu.usbmodemXXXX 115200`.
 

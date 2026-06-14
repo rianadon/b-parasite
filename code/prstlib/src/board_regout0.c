@@ -6,16 +6,10 @@
  * desired voltage at build time via CONFIG_BPARASITE_REGOUT0_*; this hook
  * writes UICR on first boot, then resets so the new voltage takes effect.
  *
- * Two paths:
- *   - Fast path: when the desired bits are a subset of the current bits
- *     (1->0 only), do a single-word partial write — no erase.
- *   - Slow path: snapshot the entire 4 KiB UICR region into a raw word
- *     buffer, erase, modify REGOUT0 in the snapshot (via NRF_UICR_Type
- *     cast for type-safe field access), then write back every word that
- *     wasn't already erased flash. NRF_UICR_Type covers only the named
- *     fields and is smaller than the 4 KiB region, so we can't size the
- *     snapshot from it — using the raw chip-spec size preserves any UICR
- *     words past the struct (CUSTOMER[], NRFFW config, future MDK additions).
+ * Snapshots NRF_UICR_Type, erases UICR via the nrfx HAL, modifies REGOUT0
+ * in the snapshot, writes the whole struct back. Bytes past the struct
+ * (chip-reserved tail) are left at 0xFFFFFFFF after the erase — NCS and
+ * the Nordic toolchain don't populate them, so nothing real is lost.
  *
  * Only runs when MAINREGSTATUS == HIGH. In normal-voltage mode the
  * regulator is bypassed and REGOUT0 has no effect.
@@ -27,56 +21,13 @@
 
 #if defined(CONFIG_BOARD_BPARASITE_NRF52840) && !defined(CONFIG_BPARASITE_REGOUT0_DEFAULT)
 
-#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
-#include <zephyr/sys/util.h>
 #include <hal/nrf_power.h>
-
-/* nRF52840 UICR is a fixed 4 KiB region. NRF_UICR_Type only covers the
- * named fields and may be smaller than this; we still want to round-trip
- * the whole region so user/toolchain words past the struct survive the
- * erase. The assertion below just bounds-checks the REGOUT0 field cast.
- */
-#define UICR_REGION_BYTES 0x1000u
-#define UICR_REGION_WORDS (UICR_REGION_BYTES / sizeof(uint32_t))
-
-BUILD_ASSERT(sizeof(NRF_UICR_Type) <= UICR_REGION_BYTES,
-	     "NRF_UICR_Type exceeds the 4 KiB UICR region");
-
-static inline void nvmc_wait_ready(void)
-{
-	while (NRF_NVMC->READY == NVMC_READY_READY_Busy) {
-	}
-}
-
-static inline void nvmc_set_write(void)
-{
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Wen << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
-}
-
-static inline void nvmc_set_erase(void)
-{
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
-}
-
-static inline void nvmc_set_readonly(void)
-{
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
-}
-
-static inline void nvmc_erase_uicr(void)
-{
-	nvmc_set_erase();
-	NRF_NVMC->ERASEUICR = NVMC_ERASEUICR_ERASEUICR_Erase;
-	nvmc_wait_ready();
-}
+#include <nrfx_nvmc.h>
 
 static uint32_t desired_vout(void)
 {
@@ -109,45 +60,19 @@ static int board_regulator_init(void)
 		return 0;
 	}
 
-	const uint32_t new_regout0 =
-		(NRF_UICR->REGOUT0 & ~((uint32_t)UICR_REGOUT0_VOUT_Msk)) |
-		(want << UICR_REGOUT0_VOUT_Pos);
+	NRF_UICR_Type tmp;
+	memcpy(&tmp, NRF_UICR, sizeof(tmp));
+	tmp.REGOUT0 = (tmp.REGOUT0 & ~((uint32_t)UICR_REGOUT0_VOUT_Msk)) |
+		      (want << UICR_REGOUT0_VOUT_Pos);
 
-	/* Fast path: target bits are a subset of current bits, so the change
-	 * is 1->0 only and a partial write without erase suffices.
-	 */
-	if ((cur & want) == want) {
-		nvmc_set_write();
-		NRF_UICR->REGOUT0 = new_regout0;
-		nvmc_wait_ready();
-		nvmc_set_readonly();
-		NVIC_SystemReset();
+	int err = nrfx_nvmc_uicr_erase();
+	__ASSERT(err == 0, "nrfx_nvmc_uicr_erase failed: %d", err);
+
+	nrfx_nvmc_bytes_write(NRF_UICR_BASE, &tmp, sizeof(tmp));
+	while (!nrfx_nvmc_write_done_check()) {
 	}
 
-	/* Slow path: snapshot the full 4 KiB UICR, erase, restore every word
-	 * that wasn't already 0xFFFFFFFF (untouched flash). Static rather
-	 * than stack to keep the early-boot stack small — this only runs
-	 * when the REGOUT0 choice changes (rare), so the 4 KiB BSS cost is
-	 * one-shot. The struct cast gives type-safe REGOUT0 access; the
-	 * BUILD_ASSERT guarantees REGOUT0 sits inside the buffer.
-	 */
-	static uint32_t snapshot[UICR_REGION_WORDS];
-	memcpy(snapshot, (const void *)NRF_UICR, UICR_REGION_BYTES);
-	((NRF_UICR_Type *)snapshot)->REGOUT0 = new_regout0;
-
-	nvmc_erase_uicr();
-	nvmc_set_write();
-
-	volatile uint32_t *dst = (volatile uint32_t *)NRF_UICR;
-	for (size_t i = 0; i < UICR_REGION_WORDS; i++) {
-		if (snapshot[i] != 0xFFFFFFFFu) {
-			dst[i] = snapshot[i];
-			nvmc_wait_ready();
-		}
-	}
-	nvmc_set_readonly();
 	NVIC_SystemReset();
-
 	return 0;
 }
 

@@ -19,6 +19,12 @@ config BOARD_REVISION_CODE
 config PRSTLIB_BATT_VOLTAGE_DIVIDER
 	default 5 if !BPARASITE_REGOUT0_DEFAULT && BOARD_BPARASITE_NRF52840
 
+# board_regout0.c calls nrfx_nvmc_uicr_erase()/_bytes_write() when the
+# REGOUT0 choice changes. Pull the nrfx NVMC driver into the build for
+# any non-DEFAULT choice so those symbols actually link.
+config NRFX_NVMC
+	default y if !BPARASITE_REGOUT0_DEFAULT && BOARD_BPARASITE_NRF52840
+
 # Single source of truth for radio TX power across BLE + 802.15.4. The
 # regulated VDD is the constraint: +8 dBm needs VDD ≳ 2.7 V under TX
 # peaks; +4 dBm needs ≳ 2.4 V; otherwise the radio browns out. BLE picks
@@ -26,13 +32,9 @@ config PRSTLIB_BATT_VOLTAGE_DIVIDER
 # zb_trans_set_tx_power().
 config PRSTLIB_RADIO_TX_PWR_DBM
 	int
-	default 0 if BPARASITE_REGOUT0_DEFAULT
-	default 0 if BPARASITE_REGOUT0_2V1
-	default 4 if BPARASITE_REGOUT0_2V4
-	default 4 if BPARASITE_REGOUT0_2V7
-	default 8 if BPARASITE_REGOUT0_3V0
-	default 8 if BPARASITE_REGOUT0_3V3
-	default 0
+	default 0 if BPARASITE_REGOUT0_DEFAULT || BPARASITE_REGOUT0_2V1
+	default 4 if BPARASITE_REGOUT0_2V4 || BPARASITE_REGOUT0_2V7
+	default 8 if BPARASITE_REGOUT0_3V0 || BPARASITE_REGOUT0_3V3
 	depends on BOARD_BPARASITE_NRF52840
 
 if BT && BOARD_BPARASITE_NRF52840

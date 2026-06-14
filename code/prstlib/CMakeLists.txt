@@ -7,5 +7,4 @@ zephyr_library_sources(
 	src/sensors.c
 	src/shtc3.c
 )
-zephyr_library_include_directories(include)
 zephyr_include_directories(include)

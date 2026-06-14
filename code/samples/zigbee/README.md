@@ -84,7 +84,7 @@ Output: `samples/zigbee/build_nrf52840_2.0.0ry1/zigbee/zephyr/zephyr.uf2` (~825 
 
 ### Development build (bring-up, logs over USB)
 
-Adds [`dev.conf`](./dev.conf) + [`dev.overlay`](./dev.overlay) on top of `prj.conf`:
+Applies the [`dev`](./snippets/dev/) Zephyr snippet on top of `prj.conf`:
 
 - USB CDC ACM virtual UART → console + log destination (no J-Link needed)
 - SEGGER RTT disabled (saves RAM, USB CDC is the active path)
@@ -96,15 +96,15 @@ Adds [`dev.conf`](./dev.conf) + [`dev.overlay`](./dev.overlay) on top of `prj.co
   -DCONFIG_BPARASITE_REGOUT0_2V1=y
 ```
 
-Output: `samples/zigbee/build_nrf52840_2.0.0ry1_dev/zigbee/zephyr/zephyr-dev.uf2` (~903 KB).
+Output: `samples/zigbee/build_nrf52840_2.0.0ry1_dev/zigbee/zephyr/zephyr.uf2` (~903 KB).
 
-The dev build lives in its own `_dev` build directory and the UF2 is renamed `zephyr-dev.uf2`, so dev and prod artifacts never overwrite each other. Don't deploy dev to battery — USB + tight loop wreck CR2032 life.
+The dev build lives in its own `_dev` build directory, so dev and prod artifacts never overwrite each other. Don't deploy dev to battery — USB + tight loop wreck CR2032 life.
 
 After flashing dev, find the CDC port: `ls /dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux), then `screen /dev/cu.usbmodemXXXX 115200`.
 
 ### Legacy `prj_debug.conf`
 
-The earlier debug config at [`prj_debug.conf`](./prj_debug.conf) predates the `--dev` flag and is no longer wired into the build script. It's kept for reference — `dev.conf` is the supported path.
+The earlier debug config at [`prj_debug.conf`](./prj_debug.conf) predates the `--dev` flag and is no longer wired into the build script. It's kept for reference — the `dev` snippet is the supported path.
 
 ## Battery Life
 While sleeping, the device consumes around 2 uA:

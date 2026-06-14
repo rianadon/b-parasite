@@ -61,7 +61,8 @@
  * Flash layout for the Adafruit nRF52840 UF2 bootloader:
  *   0x000000 - 0x001000  MBR
  *   0x001000 - 0x026000  SoftDevice region (reserved even if unused)
- *   0x026000 - 0x0F4000  Application (~824 KiB) <- slot0_partition
+ *   0x026000 - 0x0EC000  slot0_partition   (792 KiB application image)
+ *   0x0EC000 - 0x0F4000  storage_partition (32 KiB, used by zigbee NVRAM)
  *   0x0F4000 - 0x100000  Adafruit UF2 bootloader
  * MCUboot dual-slot layout is dropped — the UF2 bootloader is the only one.
  */

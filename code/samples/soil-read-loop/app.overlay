@@ -1,7 +1,6 @@
 /*
  * Route Zephyr's console to a USB CDC ACM virtual UART so the host can read
- * logs over the same USB connection used for flashing. zephyr_udc0 is the
- * nRF52840's native USB device controller (defined in Nordic's SoC dtsi).
+ * logs over the same USB connection used for flashing.
  */
 &usbd {
 	status = "okay";

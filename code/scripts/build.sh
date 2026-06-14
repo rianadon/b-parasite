@@ -19,11 +19,12 @@ usage: $(basename "$0") <sample> [soc] [revision] [--uf2] [--dev]
             nRF52840 UF2 bootloader. Sets CONFIG_BUILD_OUTPUT_UF2=y so
             Zephyr's own post-build step generates zephyr.uf2 (family
             0xADA52840 is the upstream default for SOC_NRF52840_QIAA).
-            Implies CONFIG_USE_DT_CODE_PARTITION=y and disables NCS's
-            Partition Manager so the linker honors the slot0 offset.
-  --dev     apply samples/<sample>/dev.conf and dev.overlay on top of the
-            base prj.conf. Used for bring-up: enables USB CDC ACM console,
-            debug logs, and a tight wake loop. Not for battery deployment.
+            Implies CONFIG_USE_DT_CODE_PARTITION=y, and disables NCS's
+            Partition Manager unless the sample ships pm_static.yml.
+  --dev     apply the sample's "dev" snippet (samples/<sample>/snippets/dev/)
+            on top of the base prj.conf. Used for bring-up: enables USB
+            CDC ACM console, debug logs, and a tight wake loop. Not for
+            battery deployment.
 
 env:
   CMAKE_EXTRA   extra -D… flags appended to west build
@@ -81,20 +82,15 @@ if [ "$UF2" = "1" ]; then
 fi
 
 if [ "$DEV" = "1" ]; then
-  # dev.conf / dev.overlay live at samples/<sample>/. EXTRA_CONF_FILE and
-  # EXTRA_DTC_OVERLAY_FILE need the sysbuild image-name prefix; sysbuild
-  # normalizes hyphens to underscores for the variable name.
-  IMAGE_NAME="${SAMPLE//-/_}"
-  DEV_CONF="samples/$SAMPLE/dev.conf"
-  DEV_OVERLAY="samples/$SAMPLE/dev.overlay"
-  if [ ! -f "$DEV_CONF" ]; then
-    echo "--dev requested but $DEV_CONF not found" >&2
+  # Apply the sample's "dev" snippet (Zephyr's native overlay mechanism).
+  # The snippet lives at samples/<sample>/snippets/dev/ and provides
+  # snippet.yml + dev.conf + dev.overlay.
+  SNIPPET_DIR="samples/$SAMPLE/snippets/dev"
+  if [ ! -f "$SNIPPET_DIR/snippet.yml" ]; then
+    echo "--dev requested but $SNIPPET_DIR/snippet.yml not found" >&2
     exit 1
   fi
-  CMAKE_EXTRA="$CMAKE_EXTRA -D${IMAGE_NAME}_EXTRA_CONF_FILE=dev.conf"
-  if [ -f "$DEV_OVERLAY" ]; then
-    CMAKE_EXTRA="$CMAKE_EXTRA -D${IMAGE_NAME}_EXTRA_DTC_OVERLAY_FILE=dev.overlay"
-  fi
+  CMAKE_EXTRA="$CMAKE_EXTRA -DSNIPPET=dev"
 fi
 
 # The workspace top dir is the parent of this script's dir (code/scripts/).
@@ -126,14 +122,13 @@ else
   echo "West workspace already initialized, skipping west init/update and Python dependencies installation"
 fi
 
-# Dev and prod get separate build dirs and UF2 filenames so a user can
-# rebuild one without invalidating or overwriting the other.
+# Dev and prod get separate build dirs so a user can rebuild one without
+# invalidating the other. Both produce zephyr.uf2; the build dir
+# (`_dev` suffix vs none) disambiguates.
 if [ "$DEV" = "1" ]; then
   BUILD_DIR="samples/$SAMPLE/build_${SOC}_${REV}_dev"
-  UF2_NAME="zephyr-dev.uf2"
 else
   BUILD_DIR="samples/$SAMPLE/build_${SOC}_${REV}"
-  UF2_NAME="zephyr.uf2"
 fi
 west build --pristine \
   --build-dir "$BUILD_DIR" \
@@ -144,13 +139,11 @@ west build --pristine \
 if [ "$UF2" = "1" ]; then
   # Zephyr's own post-build step (gated on CONFIG_BUILD_OUTPUT_UF2) has
   # already produced zephyr.uf2 in the build dir. We just sanity-check
-  # the link address, and rename for --dev so dev/prod artifacts are
-  # visually distinct even when colocated.
+  # the link address before reporting the path.
   ELF="$BUILD_DIR/$SAMPLE/zephyr/zephyr.elf"
-  UF2_IN="$BUILD_DIR/$SAMPLE/zephyr/zephyr.uf2"
-  UF2_OUT="$BUILD_DIR/$SAMPLE/zephyr/$UF2_NAME"
-  if [ ! -f "$UF2_IN" ]; then
-    echo "expected UF2 not found: $UF2_IN" >&2
+  UF2_OUT="$BUILD_DIR/$SAMPLE/zephyr/zephyr.uf2"
+  if [ ! -f "$UF2_OUT" ]; then
+    echo "expected UF2 not found: $UF2_OUT" >&2
     echo "  (CONFIG_BUILD_OUTPUT_UF2 should have produced it — check the cmake log)" >&2
     exit 1
   fi
@@ -174,8 +167,5 @@ if [ "$UF2" = "1" ]; then
     echo "Link address OK: _vector_table at 0x$ADDR"
   fi
 
-  if [ "$UF2_IN" != "$UF2_OUT" ]; then
-    mv "$UF2_IN" "$UF2_OUT"
-  fi
   echo "UF2: $UF2_OUT"
 fi
