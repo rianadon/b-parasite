@@ -73,7 +73,7 @@ The build script (`scripts/build.sh`) keeps Partition Manager enabled whenever t
 
 ### Production build (deploy to battery)
 
-Default `prj.conf` settings: 60-s sleep cadence between sensor reads, 10-s parent poll interval, SEGGER RTT for diagnostics (works with a J-Link, otherwise silently no-op), no USB.
+Default `prj.conf` settings: 60-s sleep cadence between sensor reads, 10-s parent poll interval, no console output (no USB, no UART, no RTT).
 
 ```
 ./scripts/build-with-docker.sh zigbee nrf52840 2.0.0ry1 --uf2 \
@@ -84,12 +84,11 @@ Output: `samples/zigbee/build_nrf52840_2.0.0ry1/zigbee/zephyr/zephyr.uf2` (~825 
 
 ### Development build (bring-up, logs over USB)
 
-Applies the [`dev`](./snippets/dev/) Zephyr snippet on top of `prj.conf`:
+Applies the shared [`dev`](../../prstlib/snippets/dev/) Zephyr snippet on top of `prj.conf`:
 
-- USB CDC ACM virtual UART → console + log destination (no J-Link needed)
-- SEGGER RTT disabled (saves RAM, USB CDC is the active path)
-- `CONFIG_PRST_ZB_SLEEP_DURATION_SEC=10` (every 10 s instead of 60 s)
+- USB CDC ACM virtual UART → console + log destination
 - `CONFIG_LOG_DEFAULT_LEVEL=4` (verbose) + `CONFIG_PRSTLIB_LOG_LEVEL_DBG=y`
+- `CONFIG_PRST_ZB_SLEEP_DURATION_SEC=10` (every 10 s instead of 60 s)
 
 ```
 ./scripts/build-with-docker.sh zigbee nrf52840 2.0.0ry1 --uf2 --dev \
@@ -98,7 +97,7 @@ Applies the [`dev`](./snippets/dev/) Zephyr snippet on top of `prj.conf`:
 
 Output: `samples/zigbee/build_nrf52840_2.0.0ry1_dev/zigbee/zephyr/zephyr.uf2` (~903 KB).
 
-The dev build lives in its own `_dev` build directory, so dev and prod artifacts never overwrite each other. Don't deploy dev to battery — USB + tight loop wreck CR2032 life.
+The dev build lives in its own `_dev` build directory, so dev and prod artifacts never overwrite each other. Don't deploy dev to battery — USB wrecks CR2032 life.
 
 After flashing dev, find the CDC port: `ls /dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux), then `screen /dev/cu.usbmodemXXXX 115200`.
 

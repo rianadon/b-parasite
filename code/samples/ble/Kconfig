@@ -2,6 +2,7 @@ source "Kconfig.zephyr"
 
 config PRST_SLEEP_DURATION_MSEC
 	int "Sleep duration in milliseconds"
+	default 5000 if PRSTLIB_DEV_FAST_LOOP
 	default 600000
 
 config PRST_BLE_ADV_DURATION_MSEC

@@ -2,6 +2,7 @@ source "Kconfig.zephyr"
 
 config PRST_ZB_SLEEP_DURATION_SEC
 	int "Sleep duration between waking up and reading sensors in seconds."
+	default 10 if PRSTLIB_DEV_FAST_LOOP
 	default 60
 
 config PRST_ZB_PARENT_POLL_INTERVAL_SEC

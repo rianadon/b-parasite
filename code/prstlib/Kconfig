@@ -12,6 +12,16 @@ config PRSTLIB_BATT_VOLTAGE_DIVIDER
 	  with VDD regulated below VDDH). Leave at 1 when the channel samples
 	  NRF_SAADC_VDD directly.
 
+config PRSTLIB_DEV_FAST_LOOP
+	bool "Use the bring-up wake cadence instead of the production default"
+	default n
+	help
+	  Single shared knob that the dev snippet flips on. Each sample's
+	  Kconfig consults this to pick a shorter sleep duration (e.g. 5 s
+	  for ble, 10 s for zigbee) so bench iteration is fast without
+	  needing per-sample overrides on the command line. Leave off for
+	  battery deployment.
+
 menu "Phototransistor calibration"
 
 config PRSTLIB_PHOTO_LUX_SUN

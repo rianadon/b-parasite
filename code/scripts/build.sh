@@ -82,14 +82,9 @@ if [ "$UF2" = "1" ]; then
 fi
 
 if [ "$DEV" = "1" ]; then
-  # Apply the sample's "dev" snippet (Zephyr's native overlay mechanism).
-  # The snippet lives at samples/<sample>/snippets/dev/ and provides
-  # snippet.yml + dev.conf + dev.overlay.
-  SNIPPET_DIR="samples/$SAMPLE/snippets/dev"
-  if [ ! -f "$SNIPPET_DIR/snippet.yml" ]; then
-    echo "--dev requested but $SNIPPET_DIR/snippet.yml not found" >&2
-    exit 1
-  fi
+  # Apply the shared "dev" snippet (Zephyr's native overlay mechanism).
+  # The snippet lives at prstlib/snippets/dev/ and is auto-discovered via
+  # prstlib's zephyr/module.yml snippet_root.
   CMAKE_EXTRA="$CMAKE_EXTRA -DSNIPPET=dev"
 fi
 

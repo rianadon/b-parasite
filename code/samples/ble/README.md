@@ -94,12 +94,11 @@ To flash: double-tap reset → drag the `.uf2` onto the `BPARASITE` USB drive.
 
 ### Development build (bring-up, sensor calibration, debugging)
 
-Same command + `--dev`. This applies the [`dev`](./snippets/dev/) Zephyr snippet (USB CDC ACM console + faster wake cadence + debug logs) on top of `prj.conf`:
+Same command + `--dev`. This applies the shared [`dev`](../../prstlib/snippets/dev/) Zephyr snippet on top of `prj.conf`:
 
 - USB CDC ACM virtual UART → console + log destination
-- `PRST_SLEEP_DURATION_MSEC = 5000` (5-s wake cadence — advertises every ~6 s)
-- `PRST_BLE_ADV_DURATION_MSEC = 1000` (1-s adv window)
-- `PRSTLIB_LOG_LEVEL_DBG=y` (per-sensor debug logs)
+- `CONFIG_LOG_DEFAULT_LEVEL=4` (verbose) + `CONFIG_PRSTLIB_LOG_LEVEL_DBG=y` (per-sensor debug logs)
+- `CONFIG_PRST_SLEEP_DURATION_MSEC=5000` (advertise every ~6 s instead of every 10 min)
 
 ```
 ./scripts/build-with-docker.sh ble nrf52840 2.0.0ry1 --uf2 --dev \
