@@ -1,4 +1,5 @@
-add_library(prstlib STATIC
+zephyr_library()
+zephyr_library_sources(
 	src/adc.c
 	src/board_regout0.c
 	src/button.c
@@ -6,6 +7,5 @@ add_library(prstlib STATIC
 	src/sensors.c
 	src/shtc3.c
 )
-
-target_include_directories(prstlib PUBLIC include)
-target_link_libraries(prstlib PUBLIC zephyr_interface kernel)
+zephyr_library_include_directories(include)
+zephyr_include_directories(include)

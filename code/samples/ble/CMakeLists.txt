@@ -9,5 +9,3 @@ target_sources(app PRIVATE
 	src/ble.c
 	src/encoding.c
 )
-
-target_link_libraries(app PUBLIC prstlib)

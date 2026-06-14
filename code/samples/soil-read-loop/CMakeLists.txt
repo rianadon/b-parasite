@@ -3,4 +3,3 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(soil_read_loop)
 
 target_sources(app PRIVATE src/main.c)
-target_link_libraries(app PUBLIC prstlib)

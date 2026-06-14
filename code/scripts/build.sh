@@ -16,7 +16,9 @@ usage: $(basename "$0") <sample> [soc] [revision] [--uf2] [--dev]
   soc       nrf52840 (default) | nrf52833
   revision  2.0.0 (default) | 1.2.0 | 1.1.0 | 1.0.0 | 2.0.0ry1
   --uf2     also emit a .uf2 next to zephyr.hex, targeting the Adafruit
-            nRF52840 UF2 bootloader (family 0xADA52840, app at 0x26000).
+            nRF52840 UF2 bootloader. Sets CONFIG_BUILD_OUTPUT_UF2=y so
+            Zephyr's own post-build step generates zephyr.uf2 (family
+            0xADA52840 is the upstream default for SOC_NRF52840_QIAA).
             Implies CONFIG_USE_DT_CODE_PARTITION=y and disables NCS's
             Partition Manager so the linker honors the slot0 offset.
   --dev     apply samples/<sample>/dev.conf and dev.overlay on top of the
@@ -63,6 +65,11 @@ if [ "$UF2" = "1" ]; then
   # Force the linker to use slot0_partition's address from devicetree (0x26000
   # on revisions with the UF2 layout).
   CMAKE_EXTRA="$CMAKE_EXTRA -DCONFIG_USE_DT_CODE_PARTITION=y"
+  # Have Zephyr's own build system emit zephyr.uf2 alongside zephyr.hex.
+  # Family ID 0xADA52840 is the upstream default for SOC_NRF52840_QIAA,
+  # and the base address comes from CONFIG_FLASH_LOAD_OFFSET (which
+  # USE_DT_CODE_PARTITION points at slot0 = 0x26000).
+  CMAKE_EXTRA="$CMAKE_EXTRA -DCONFIG_BUILD_OUTPUT_UF2=y"
   # Auto-detect whether the sample needs Partition Manager: if it ships
   # pm_static.yml it's committed to the PM regime (zigbee needs this
   # because zb_nrf_nvram.c hard-includes pm_config.h). Otherwise turn
@@ -135,12 +142,16 @@ west build --pristine \
   $CMAKE_EXTRA
 
 if [ "$UF2" = "1" ]; then
-  # zephyr.hex is the post-build artifact; convert with the Adafruit family ID.
-  HEX="$BUILD_DIR/$SAMPLE/zephyr/zephyr.hex"
+  # Zephyr's own post-build step (gated on CONFIG_BUILD_OUTPUT_UF2) has
+  # already produced zephyr.uf2 in the build dir. We just sanity-check
+  # the link address, and rename for --dev so dev/prod artifacts are
+  # visually distinct even when colocated.
   ELF="$BUILD_DIR/$SAMPLE/zephyr/zephyr.elf"
+  UF2_IN="$BUILD_DIR/$SAMPLE/zephyr/zephyr.uf2"
   UF2_OUT="$BUILD_DIR/$SAMPLE/zephyr/$UF2_NAME"
-  if [ ! -f "$HEX" ]; then
-    echo "expected hex not found: $HEX" >&2
+  if [ ! -f "$UF2_IN" ]; then
+    echo "expected UF2 not found: $UF2_IN" >&2
+    echo "  (CONFIG_BUILD_OUTPUT_UF2 should have produced it — check the cmake log)" >&2
     exit 1
   fi
 
@@ -149,7 +160,8 @@ if [ "$UF2" = "1" ]; then
   # _vector_table anywhere else, flashing the resulting UF2 either fails
   # silently or — worse — corrupts something. This catches PM/DT/Kconfig
   # drift before we hand the user a bricking artifact.
-  NM=$(command -v arm-zephyr-eabi-nm || ls /opt/toolchains/zephyr-sdk-*/arm-zephyr-eabi/bin/arm-zephyr-eabi-nm 2>/dev/null | head -1)
+  NM=$(command -v arm-zephyr-eabi-nm \
+       || ls /opt/toolchains/zephyr-sdk-*/arm-zephyr-eabi/bin/arm-zephyr-eabi-nm 2>/dev/null | head -1)
   if [ -z "$NM" ]; then
     echo "WARN: arm-zephyr-eabi-nm not found — skipping link address check." >&2
   else
@@ -161,6 +173,9 @@ if [ "$UF2" = "1" ]; then
     fi
     echo "Link address OK: _vector_table at 0x$ADDR"
   fi
-  echo "Generating UF2 → $UF2_OUT"
-  python3 scripts/uf2conv.py -f 0xADA52840 -c -o "$UF2_OUT" "$HEX"
+
+  if [ "$UF2_IN" != "$UF2_OUT" ]; then
+    mv "$UF2_IN" "$UF2_OUT"
+  fi
+  echo "UF2: $UF2_OUT"
 fi

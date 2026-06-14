@@ -19,19 +19,28 @@ config BOARD_REVISION_CODE
 config PRSTLIB_BATT_VOLTAGE_DIVIDER
 	default 5 if !BPARASITE_REGOUT0_DEFAULT && BOARD_BPARASITE_NRF52840
 
-# Cap BLE TX power to what the regulated VDD can actually sustain.
-# +8 dBm requires VDD ≳ 2.7 V under TX peaks; +4 dBm needs ≳ 2.4 V; below
-# that the controller falls back to 0 dBm. Sample-level prj.conf can
-# still override these.
+# Single source of truth for radio TX power across BLE + 802.15.4. The
+# regulated VDD is the constraint: +8 dBm needs VDD ≳ 2.7 V under TX
+# peaks; +4 dBm needs ≳ 2.4 V; otherwise the radio browns out. BLE picks
+# its choice symbol from this int, and zigbee passes it straight to
+# zb_trans_set_tx_power().
+config PRSTLIB_RADIO_TX_PWR_DBM
+	int
+	default 0 if BPARASITE_REGOUT0_DEFAULT
+	default 0 if BPARASITE_REGOUT0_2V1
+	default 4 if BPARASITE_REGOUT0_2V4
+	default 4 if BPARASITE_REGOUT0_2V7
+	default 8 if BPARASITE_REGOUT0_3V0
+	default 8 if BPARASITE_REGOUT0_3V3
+	default 0
+	depends on BOARD_BPARASITE_NRF52840
+
 if BT && BOARD_BPARASITE_NRF52840
 
 choice BT_CTLR_TX_PWR
-	default BT_CTLR_TX_PWR_0      if BPARASITE_REGOUT0_DEFAULT
-	default BT_CTLR_TX_PWR_0      if BPARASITE_REGOUT0_2V1
-	default BT_CTLR_TX_PWR_PLUS_4 if BPARASITE_REGOUT0_2V4
-	default BT_CTLR_TX_PWR_PLUS_4 if BPARASITE_REGOUT0_2V7
-	default BT_CTLR_TX_PWR_PLUS_8 if BPARASITE_REGOUT0_3V0
-	default BT_CTLR_TX_PWR_PLUS_8 if BPARASITE_REGOUT0_3V3
+	default BT_CTLR_TX_PWR_0      if PRSTLIB_RADIO_TX_PWR_DBM = 0
+	default BT_CTLR_TX_PWR_PLUS_4 if PRSTLIB_RADIO_TX_PWR_DBM = 4
+	default BT_CTLR_TX_PWR_PLUS_8 if PRSTLIB_RADIO_TX_PWR_DBM = 8
 endchoice
 
 endif # BT && BOARD_BPARASITE_NRF52840

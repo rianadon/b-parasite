@@ -56,7 +56,7 @@ The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and 
 
 Same `CONFIG_BPARASITE_REGOUT0_*` Kconfig choice as the ble sample — see [`samples/ble/README.md`](../ble/README.md#selecting-the-regulated-vdd-regout0) for the full voltage trade-off table. Pass via `-DCONFIG_BPARASITE_REGOUT0_2V1=y` (or another value).
 
-**Note on Zigbee radio TX power:** unlike BLE, the board defconfig does *not* auto-cap 802.15.4 TX power based on REGOUT0. ZBOSS in NCS routes TX power through its own path (`zb_set_tx_power()` API at runtime) rather than `CONFIG_NET_L2_IEEE802154_RADIO_DFLT_TX_POWER`. If you run at 2.1 V VDD, set the Zigbee stack TX power to 0 dBm at boot from C code, otherwise the radio may try to transmit at +8 dBm and trip a brownout.
+**Note on Zigbee radio TX power:** ZBOSS in NCS routes TX power through its own path (`zb_trans_set_tx_power()`) rather than `CONFIG_NET_L2_IEEE802154_RADIO_DFLT_TX_POWER`, so the board defconfig's `BT_CTLR_TX_PWR_*` choice doesn't reach it. Instead, `main.c` reads `CONFIG_PRSTLIB_RADIO_TX_PWR_DBM` (derived from `REGOUT0` in [`Kconfig.defconfig`](../../prstlib/boards/bparasite/Kconfig.defconfig)) and calls `zb_trans_set_tx_power()` right after `zigbee_enable()`. To override, set `CONFIG_PRSTLIB_RADIO_TX_PWR_DBM=<dBm>` in your build.
 
 ### Partition layout
 
@@ -69,7 +69,7 @@ NCS Zigbee NVRAM (`ncs-zigbee/subsys/osif/zb_nrf_nvram.c`) hard-includes `pm_con
 | `settings_storage` | 0x0EC000–0x0F4000 | 32 KiB LittleFS for ZBOSS network credentials |
 | `uf2_bootloader_reserved` | 0x0F4000–0x100000 | Adafruit UF2 bootloader (don't touch) |
 
-The build script auto-detects `--uf2 zigbee` and leaves PM enabled.
+The build script (`scripts/build.sh`) keeps Partition Manager enabled whenever the sample ships a `pm_static.yml`. For samples without one (ble, blinky, input, soil-read-loop), `--uf2` flips PM off so the linker honours the DT `slot0_partition` offset instead.
 
 ### Production build (deploy to battery)
 

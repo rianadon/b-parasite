@@ -15,5 +15,3 @@ target_sources(app PRIVATE
   src/restart_handler.c
   src/watchdog.c
 )
-
-target_link_libraries(app PUBLIC prstlib)

@@ -8,7 +8,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#include "prstlib/board_regulator.h"
 #include "prstlib/macros.h"
 
 LOG_MODULE_REGISTER(adc, CONFIG_PRSTLIB_LOG_LEVEL);
@@ -119,10 +118,6 @@ static int read_adc_spec(const struct adc_dt_spec* spec, prst_adc_read_t* out) {
 }
 
 int prst_adc_init() {
-  // Run before anything reads the ADC: programs UICR.REGOUT0 if the build
-  // selected a non-default VDD, triggering a reset to apply it.
-  prst_board_regulator_init();
-
   RET_IF_ERR(adc_channel_setup_dt(&adc_soil_spec));
   RET_IF_ERR(adc_channel_setup_dt(&adc_batt_spec));
 

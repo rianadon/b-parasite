@@ -3,4 +3,3 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(input)
 
 target_sources(app PRIVATE src/main.c)
-target_link_libraries(app PUBLIC prstlib)
