@@ -142,6 +142,15 @@
 	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
 };
 
+/*
+ * Alias the USB device controller as zephyr_udc0 so the upstream
+ * cdc-acm-console snippet and the prstlib dev snippet (USB CDC bring-up
+ * console) can attach without per-overlay glue.
+ */
+zephyr_udc0: &usbd {
+	status = "okay";
+};
+
 &flash0 {
 
 	partitions {

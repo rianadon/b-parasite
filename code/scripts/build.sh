@@ -21,10 +21,10 @@ usage: $(basename "$0") <sample> [soc] [revision] [--uf2] [--dev]
             0xADA52840 is the upstream default for SOC_NRF52840_QIAA).
             Implies CONFIG_USE_DT_CODE_PARTITION=y, and disables NCS's
             Partition Manager unless the sample ships pm_static.yml.
-  --dev     apply the sample's "dev" snippet (samples/<sample>/snippets/dev/)
-            on top of the base prj.conf. Used for bring-up: enables USB
-            CDC ACM console, debug logs, and a tight wake loop. Not for
-            battery deployment.
+  --dev     apply prstlib's "dev" snippet plus Zephyr's upstream
+            "cdc-acm-console" snippet. Used for bring-up: enables USB
+            CDC ACM console (new USBD stack), verbose logging, and a
+            shrunk sleep cadence. Not for battery deployment.
 
 env:
   CMAKE_EXTRA   extra -D… flags appended to west build
@@ -81,11 +81,21 @@ if [ "$UF2" = "1" ]; then
   fi
 fi
 
-if [ "$DEV" = "1" ]; then
-  # Apply the shared "dev" snippet (Zephyr's native overlay mechanism).
-  # The snippet lives at prstlib/snippets/dev/ and is auto-discovered via
-  # prstlib's zephyr/module.yml snippet_root.
-  CMAKE_EXTRA="$CMAKE_EXTRA -DSNIPPET=dev"
+WEST_SNIPPETS=()
+if [ "$SAMPLE" = "soil-read-loop" ]; then
+  # Permanent bring-up tool — always-on USB output, no dev/prod split.
+  # Apply the upstream cdc-acm-console snippet unconditionally; the prstlib
+  # dev snippet (fast loop, verbose logs) doesn't fit this sample.
+  WEST_SNIPPETS+=(--snippet cdc-acm-console)
+  if [ "$DEV" = "1" ]; then
+    echo "note: --dev is a no-op for soil-read-loop (no dev/prod split)" >&2
+  fi
+elif [ "$DEV" = "1" ]; then
+  # Apply two snippets: Zephyr's upstream cdc-acm-console (USB CDC
+  # console under the new USBD stack) + prstlib's dev snippet (verbose
+  # logging, shrunk sleep cadence). prstlib's snippet is auto-discovered
+  # via its zephyr/module.yml snippet_root.
+  WEST_SNIPPETS+=(--snippet cdc-acm-console --snippet dev)
 fi
 
 # The workspace top dir is the parent of this script's dir (code/scripts/).
@@ -128,6 +138,7 @@ fi
 west build --pristine \
   --build-dir "$BUILD_DIR" \
   --board "bparasite@${REV}/${SOC}" \
+  "${WEST_SNIPPETS[@]}" \
   "samples/$SAMPLE" -- \
   $CMAKE_EXTRA
 

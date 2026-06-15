@@ -11,7 +11,7 @@ static const struct pwm_dt_spec soil_pwm_dt =
     PWM_DT_SPEC_GET(DT_NODELABEL(soil_pwm));
 static const uint32_t pulse = DT_PROP(DT_NODELABEL(soil_pwm), pulse);
 
-struct gpio_dt_spec fast_disch_dt =
+static const struct gpio_dt_spec fast_disch_dt =
     GPIO_DT_SPEC_GET(DT_NODELABEL(fast_disch), gpios);
 
 static const struct adc_dt_spec adc_soil_spec =
