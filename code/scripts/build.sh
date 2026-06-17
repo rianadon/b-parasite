@@ -35,10 +35,16 @@ EOF
 UF2=0
 DEV=0
 POSITIONAL=()
+CMAKE_EXTRA="${CMAKE_EXTRA:-}"
 for arg in "$@"; do
   case "$arg" in
     --uf2) UF2=1 ;;
     --dev) DEV=1 ;;
+    # Forward any -D... arg straight to west build's cmake invocation.
+    # Lets the user override Kconfig from the command line, e.g.
+    # `-DCONFIG_BPARASITE_REGOUT0_2V1=y`, without needing to set the
+    # CMAKE_EXTRA env var.
+    -D*) CMAKE_EXTRA="$CMAKE_EXTRA $arg" ;;
     -h|--help) usage ;;
     *) POSITIONAL+=("$arg") ;;
   esac
@@ -47,7 +53,6 @@ done
 SAMPLE="${POSITIONAL[0]:-}"
 SOC="${POSITIONAL[1]:-nrf52840}"
 REV="${POSITIONAL[2]:-2.0.0}"
-CMAKE_EXTRA="${CMAKE_EXTRA:-}"
 
 [ -z "$SAMPLE" ] && usage
 

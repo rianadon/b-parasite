@@ -17,6 +17,12 @@
  * Registered as SYS_INIT(PRE_KERNEL_1) so it runs before any driver
  * that depends on a specific VDD. Requires prstlib to be built as a
  * zephyr_library so the init record survives the link.
+ *
+ * If the erase fails or the post-write readback of REGOUT0 doesn't match
+ * the intended value, fatal_blink() drops the CPU into an infinite LED
+ * blink so a half-programmed UICR can't be left to brick the board
+ * silently — the user sees the failure and pulls the battery before
+ * trusting the chip.
  */
 
 #if defined(CONFIG_BOARD_BPARASITE_NRF52840) && !defined(CONFIG_BPARASITE_REGOUT0_DEFAULT)
@@ -24,10 +30,22 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <zephyr/devicetree.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <hal/nrf_gpio.h>
 #include <hal/nrf_power.h>
 #include <nrfx_nvmc.h>
+
+/* led0 is a node label on every bparasite board revision (base DTS +
+ * per-revision overlays). At PRE_KERNEL_1 the Zephyr GPIO driver isn't
+ * up yet, so fatal_blink() pokes the nrf_gpio HAL directly using the
+ * absolute pin number (port*32 + pin) derived from DT.
+ */
+#define LED_NODE    DT_NODELABEL(led0)
+#define LED_PORT    DT_PROP(DT_GPIO_CTLR(LED_NODE, gpios), port)
+#define LED_PIN     DT_GPIO_PIN(LED_NODE, gpios)
+#define LED_ABS_PIN NRF_GPIO_PIN_MAP(LED_PORT, LED_PIN)
 
 static uint32_t desired_vout(void)
 {
@@ -44,6 +62,16 @@ static uint32_t desired_vout(void)
 #else
 #error "No BPARASITE_REGOUT0_* selected"
 #endif
+}
+
+__attribute__((noreturn))
+static void fatal_blink(void)
+{
+	nrf_gpio_cfg_output(LED_ABS_PIN);
+	for (;;) {
+		nrf_gpio_pin_toggle(LED_ABS_PIN);
+		k_busy_wait(100000);
+	}
 }
 
 static int board_regulator_init(void)
@@ -65,11 +93,23 @@ static int board_regulator_init(void)
 	tmp.REGOUT0 = (tmp.REGOUT0 & ~((uint32_t)UICR_REGOUT0_VOUT_Msk)) |
 		      (want << UICR_REGOUT0_VOUT_Pos);
 
-	int err = nrfx_nvmc_uicr_erase();
-	__ASSERT(err == 0, "nrfx_nvmc_uicr_erase failed: %d", err);
+	if (nrfx_nvmc_uicr_erase() != 0) {
+		fatal_blink();
+	}
 
 	nrfx_nvmc_bytes_write(NRF_UICR_BASE, &tmp, sizeof(tmp));
 	while (!nrfx_nvmc_write_done_check()) {
+	}
+
+	/* Readback verification: confirms the field we cared about landed.
+	 * If the chip is in a state that silently drops UICR writes (APPROTECT,
+	 * NVMC misconfig, hardware fault), this catches it before we reset
+	 * into an unknown VDD.
+	 */
+	const uint32_t got =
+		(NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk) >> UICR_REGOUT0_VOUT_Pos;
+	if (got != want) {
+		fatal_blink();
 	}
 
 	NVIC_SystemReset();

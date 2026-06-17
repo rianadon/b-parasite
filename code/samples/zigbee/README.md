@@ -101,10 +101,6 @@ The dev build lives in its own `_dev` build directory, so dev and prod artifacts
 
 After flashing dev, find the CDC port: `ls /dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux), then `screen /dev/cu.usbmodemXXXX 115200`.
 
-### Legacy `prj_debug.conf`
-
-The earlier debug config at [`prj_debug.conf`](./prj_debug.conf) predates the `--dev` flag and is no longer wired into the build script. It's kept for reference — the `dev` snippet is the supported path.
-
 ## Battery Life
 While sleeping, the device consumes around 2 uA:
 ![sleeping current](./media/power-profile/sleeping.png)
