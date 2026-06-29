@@ -21,6 +21,23 @@ static const uint32_t pulse = DT_PROP(DT_NODELABEL(soil_pwm), pulse);
 static const int dry_coeffs[3] = DT_PROP(DT_NODELABEL(soil_calibration_coeffs), dry);
 static const int wet_coeffs[3] = DT_PROP(DT_NODELABEL(soil_calibration_coeffs), wet);
 
+// Soil PWM drive voltage. When REGOUT0 regulates VDD to a fixed rail, the
+// drive amplitude no longer tracks the battery, so the dry/wet polynomial
+// must be evaluated at that constant — otherwise reported moisture would
+// drift as the CR2032 discharges. On a default-REGOUT0 build, VDD == VDDH
+// == battery and the legacy battery-voltage evaluation is correct.
+#if defined(CONFIG_BPARASITE_REGOUT0_2V1)
+#define PRST_SOIL_VDRIVE_FIXED 2.1f
+#elif defined(CONFIG_BPARASITE_REGOUT0_2V4)
+#define PRST_SOIL_VDRIVE_FIXED 2.4f
+#elif defined(CONFIG_BPARASITE_REGOUT0_2V7)
+#define PRST_SOIL_VDRIVE_FIXED 2.7f
+#elif defined(CONFIG_BPARASITE_REGOUT0_3V0)
+#define PRST_SOIL_VDRIVE_FIXED 3.0f
+#elif defined(CONFIG_BPARASITE_REGOUT0_3V3)
+#define PRST_SOIL_VDRIVE_FIXED 3.3f
+#endif
+
 struct gpio_dt_spec fast_disch_dt =
     GPIO_DT_SPEC_GET(DT_NODELABEL(fast_disch), gpios);
 
@@ -92,11 +109,16 @@ static inline float eval_poly(const int coeffs[3], float x) {
 
 static inline float get_soil_moisture_percent(float battery_voltage,
                                               int16_t raw_adc_output) {
+#ifdef PRST_SOIL_VDRIVE_FIXED
+  ARG_UNUSED(battery_voltage);
+  const float x = PRST_SOIL_VDRIVE_FIXED;
+#else
   const float x = battery_voltage;
+#endif
   const float dry = eval_poly(dry_coeffs, x);
   const float wet = eval_poly(wet_coeffs, x);
   const float percent = (raw_adc_output - dry) / (wet - dry);
-  LOG_DBG("Read soil moisture 2: %.2f | Raw %u | Batt: %.2f | Dry: %.2f | Wet: %.2f",
+  LOG_DBG("Read soil moisture 2: %.2f | Raw %u | V_drive: %.2f | Dry: %.2f | Wet: %.2f",
           DOUBLE_PROMO_OK(100 * percent),
           raw_adc_output, DOUBLE_PROMO_OK(x), DOUBLE_PROMO_OK(dry), DOUBLE_PROMO_OK(wet));
   return percent;

@@ -22,7 +22,7 @@ WORKSPACE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Running build inside docker image '$IMAGE' with workspace_dir='$WORKSPACE_DIR'…"
 
-exec docker run --rm \
+exec podman run --rm \
   -v "$WORKSPACE_DIR":/workspace \
   -w /workspace \
   -e CMAKE_EXTRA="${CMAKE_EXTRA:-}" \
