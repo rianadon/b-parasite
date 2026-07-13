@@ -50,7 +50,7 @@ With [Zigbee2MQTT](https://zigbee2mqtt.io/), a custom converter is required. The
 
 ## Building
 
-The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the Zephyr CI container (use [`build-with-docker.sh`](../../scripts/build-with-docker.sh) or `alias docker=podman` first).
+The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the Zephyr CI container. The [`build-with-docker.sh`](../../scripts/build-with-docker.sh) wrapper auto-detects `podman` or `docker` on your `PATH` and works with either (override with `B_PARASITE_CONTAINER_RUNTIME=docker` if needed).
 
 ### Selecting the regulated VDD (`REGOUT0`)
 
@@ -100,6 +100,37 @@ Output: `samples/zigbee/build_nrf52840_2.0.0ry1_dev/zigbee/zephyr/zephyr.uf2` (~
 The dev build lives in its own `_dev` build directory, so dev and prod artifacts never overwrite each other. Don't deploy dev to battery — USB wrecks CR2032 life.
 
 After flashing dev, find the CDC port: `ls /dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux), then `screen /dev/cu.usbmodemXXXX 115200`.
+
+### Calibrating soil moisture (per-board, per-VDD)
+
+The reported soil-moisture percentage is linear between two raw ADC endpoints:
+
+- `PRSTLIB_SOIL_DRY_RAW` — raw 10-bit SAADC value with the sensor in **open air**
+- `PRSTLIB_SOIL_WET_RAW` — raw 10-bit SAADC value with the sensor **submerged in tap water**
+
+Both are pure `int` Kconfigs, settable per build via `-D` flags. Both shift with VDD (re-measure if you change `REGOUT0`) and vary ±30% between physical PCBs — calibrate once per device. The defaults (`500`/`150`) are placeholders that compile and produce plausible-but-wrong numbers; they aren't a measurement.
+
+#### Procedure
+
+1. Flash a `--dev` UF2 (see *Development build* above) and open the CDC console: `screen /dev/cu.usbmodemXXXX 115200`.
+2. With the sensor sitting in **open air** (touching nothing), wait for a log line like:
+   ```
+   Read soil moisture 2: -8.30 | Raw 505 | V_drive: 2.10 | Dry: 500.00 | Wet: 150.00
+   ```
+   Record the **Raw** value (here, `505`) — this is your `PRSTLIB_SOIL_DRY_RAW`. "Dry"/"Wet" in the log are the calibration the firmware is *currently using*, not your measurement.
+3. Submerge the sensor pads in **tap water**, deep enough to fully cover the fork. Wait for the next log line; record its Raw value — that's `PRSTLIB_SOIL_WET_RAW`.
+4. Rebuild the production UF2 with your two values appended:
+
+```
+./scripts/build-with-docker.sh zigbee nrf52840 2.0.0ry1 --uf2 \
+  -DCONFIG_BPARASITE_REGOUT0_2V1=y \
+  -DCONFIG_PRSTLIB_SOIL_DRY_RAW=505 \
+  -DCONFIG_PRSTLIB_SOIL_WET_RAW=172
+```
+
+Sanity check after flashing and pairing: with the sensor in air, the reported moisture in ZHA / Zigbee2MQTT should be ~0%; submerged, ~100%.
+
+> **Note:** soil calibration via Kconfig is wired up only on regulated-VDD builds (any non-`REGOUT0_DEFAULT` choice). On the legacy unregulated path (`REGOUT0_DEFAULT`), the dry/wet endpoints still come from the polynomial coefficients in [`prstlib/boards/bparasite/*.overlay`](../../prstlib/boards/bparasite/) and the `-D` flags are ignored — see [`prstlib/src/adc.c`](../../prstlib/src/adc.c).
 
 ## Battery Life
 While sleeping, the device consumes around 2 uA:

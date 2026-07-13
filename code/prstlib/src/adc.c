@@ -110,13 +110,17 @@ static inline float eval_poly(const int coeffs[3], float x) {
 static inline float get_soil_moisture_percent(float battery_voltage,
                                               int16_t raw_adc_output) {
 #ifdef PRST_SOIL_VDRIVE_FIXED
+  // Regulated VDD: dry/wet are constants from Kconfig (settable via
+  // -DCONFIG_PRSTLIB_SOIL_DRY_RAW=…). The DT polynomial is bypassed.
   ARG_UNUSED(battery_voltage);
   const float x = PRST_SOIL_VDRIVE_FIXED;
+  const float dry = (float)CONFIG_PRSTLIB_SOIL_DRY_RAW;
+  const float wet = (float)CONFIG_PRSTLIB_SOIL_WET_RAW;
 #else
   const float x = battery_voltage;
-#endif
   const float dry = eval_poly(dry_coeffs, x);
   const float wet = eval_poly(wet_coeffs, x);
+#endif
   const float percent = (raw_adc_output - dry) / (wet - dry);
   LOG_DBG("Read soil moisture 2: %.2f | Raw %u | V_drive: %.2f | Dry: %.2f | Wet: %.2f",
           DOUBLE_PROMO_OK(100 * percent),

@@ -37,7 +37,7 @@ The disadvantages of this encoding are:
 
 ## Building
 
-The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the same Zephyr CI container that GitHub Actions uses. A wrapper at [`code/scripts/build-with-docker.sh`](../../scripts/build-with-docker.sh) handles the container — replace `docker` with `podman` if that's what you have, or `alias docker=podman` first.
+The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the same Zephyr CI container that GitHub Actions uses. A wrapper at [`code/scripts/build-with-docker.sh`](../../scripts/build-with-docker.sh) handles the container — it auto-detects `podman` or `docker` on your `PATH` and works with either (override with `B_PARASITE_CONTAINER_RUNTIME=docker` if needed).
 
 ```
 usage: build.sh <sample> [soc] [revision] [--uf2] [--dev]
@@ -112,6 +112,37 @@ The dev build lives in a separate build dir (`_dev` suffix), so dev and prod art
 After flashing, the board enumerates as a USB CDC ACM device (look for `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on Linux). Open it with any terminal: `screen /dev/cu.usbmodemXXXX 115200`.
 
 Don't deploy a dev build to battery — USB and the 5-s loop drain a CR2032 in days, not years.
+
+### Calibrating soil moisture (per-board, per-VDD)
+
+The reported soil-moisture percentage is linear between two raw ADC endpoints:
+
+- `PRSTLIB_SOIL_DRY_RAW` — raw 10-bit SAADC value with the sensor in **open air**
+- `PRSTLIB_SOIL_WET_RAW` — raw 10-bit SAADC value with the sensor **submerged in tap water**
+
+Both are pure `int` Kconfigs, settable per build via `-D` flags. Both shift with VDD (re-measure if you change `REGOUT0`) and vary ±30% between physical PCBs — calibrate once per device. The defaults (`500`/`150`) are placeholders that compile and produce plausible-but-wrong numbers; they aren't a measurement.
+
+#### Procedure
+
+1. Flash a `--dev` UF2 (see *Development build* above) and open the CDC console: `screen /dev/cu.usbmodemXXXX 115200`.
+2. With the sensor sitting in **open air** (touching nothing), wait for a log line like:
+   ```
+   Read soil moisture 2: -8.30 | Raw 505 | V_drive: 2.10 | Dry: 500.00 | Wet: 150.00
+   ```
+   Record the **Raw** value (here, `505`) — this is your `PRSTLIB_SOIL_DRY_RAW`. "Dry"/"Wet" in the log are the calibration the firmware is *currently using*, not your measurement.
+3. Submerge the sensor pads in **tap water**, deep enough to fully cover the fork. Wait for the next log line; record its Raw value — that's `PRSTLIB_SOIL_WET_RAW`.
+4. Rebuild the production UF2 with your two values appended:
+
+```
+./scripts/build-with-docker.sh ble nrf52840 2.0.0ry1 --uf2 \
+  -DCONFIG_BPARASITE_REGOUT0_2V1=y \
+  -DCONFIG_PRSTLIB_SOIL_DRY_RAW=505 \
+  -DCONFIG_PRSTLIB_SOIL_WET_RAW=172
+```
+
+Sanity check after flashing: with the sensor in air, advertised moisture should report ~0%; submerged, ~100%.
+
+> **Note:** soil calibration via Kconfig is wired up only on regulated-VDD builds (any non-`REGOUT0_DEFAULT` choice). On the legacy unregulated path (`REGOUT0_DEFAULT`), the dry/wet endpoints still come from the polynomial coefficients in [`prstlib/boards/bparasite/*.overlay`](../../prstlib/boards/bparasite/) and the `-D` flags are ignored — see [`prstlib/src/adc.c`](../../prstlib/src/adc.c).
 
 ### Other targets
 
