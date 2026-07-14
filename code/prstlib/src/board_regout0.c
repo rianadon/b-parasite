@@ -27,97 +27,92 @@
 
 #if defined(CONFIG_BOARD_BPARASITE_NRF52840)
 
-#include <stdint.h>
-#include <string.h>
-
-#include <zephyr/devicetree.h>
-#include <zephyr/init.h>
-#include <zephyr/kernel.h>
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_power.h>
 #include <nrfx_nvmc.h>
+#include <stdint.h>
+#include <string.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/init.h>
+#include <zephyr/kernel.h>
 
 /* led0 is a node label on every bparasite board revision (base DTS +
  * per-revision overlays). At PRE_KERNEL_1 the Zephyr GPIO driver isn't
  * up yet, so fatal_blink() pokes the nrf_gpio HAL directly using the
  * absolute pin number (port*32 + pin) derived from DT.
  */
-#define LED_NODE    DT_NODELABEL(led0)
-#define LED_PORT    DT_PROP(DT_GPIO_CTLR(LED_NODE, gpios), port)
-#define LED_PIN     DT_GPIO_PIN(LED_NODE, gpios)
+#define LED_NODE DT_NODELABEL(led0)
+#define LED_PORT DT_PROP(DT_GPIO_CTLR(LED_NODE, gpios), port)
+#define LED_PIN DT_GPIO_PIN(LED_NODE, gpios)
 #define LED_ABS_PIN NRF_GPIO_PIN_MAP(LED_PORT, LED_PIN)
 
-static uint32_t desired_vout(void)
-{
+static uint32_t desired_vout(void) {
 #if CONFIG_BPARASITE_REGOUT0_1V8
-	return UICR_REGOUT0_VOUT_1V8;
+  return UICR_REGOUT0_VOUT_1V8;
 #elif CONFIG_BPARASITE_REGOUT0_2V1
-	return UICR_REGOUT0_VOUT_2V1;
+  return UICR_REGOUT0_VOUT_2V1;
 #elif CONFIG_BPARASITE_REGOUT0_2V4
-	return UICR_REGOUT0_VOUT_2V4;
+  return UICR_REGOUT0_VOUT_2V4;
 #elif CONFIG_BPARASITE_REGOUT0_2V7
-	return UICR_REGOUT0_VOUT_2V7;
+  return UICR_REGOUT0_VOUT_2V7;
 #elif CONFIG_BPARASITE_REGOUT0_3V0
-	return UICR_REGOUT0_VOUT_3V0;
+  return UICR_REGOUT0_VOUT_3V0;
 #elif CONFIG_BPARASITE_REGOUT0_3V3
-	return UICR_REGOUT0_VOUT_3V3;
+  return UICR_REGOUT0_VOUT_3V3;
 #else
 #error "No BPARASITE_REGOUT0_* selected"
 #endif
 }
 
-__attribute__((noreturn))
-static void fatal_blink(void)
-{
-	nrf_gpio_cfg_output(LED_ABS_PIN);
-	for (;;) {
-		nrf_gpio_pin_toggle(LED_ABS_PIN);
-		k_busy_wait(100000);
-	}
+__attribute__((noreturn)) static void fatal_blink(void) {
+  nrf_gpio_cfg_output(LED_ABS_PIN);
+  for (;;) {
+    nrf_gpio_pin_toggle(LED_ABS_PIN);
+    k_busy_wait(100000);
+  }
 }
 
-static int board_regulator_init(void)
-{
-	if (nrf_power_mainregstatus_get(NRF_POWER) != NRF_POWER_MAINREGSTATUS_HIGH) {
-		return 0;
-	}
+static int board_regulator_init(void) {
+  if (nrf_power_mainregstatus_get(NRF_POWER) != NRF_POWER_MAINREGSTATUS_HIGH) {
+    return 0;
+  }
 
-	const uint32_t want = desired_vout();
-	const uint32_t cur =
-		(NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk) >> UICR_REGOUT0_VOUT_Pos;
+  const uint32_t want = desired_vout();
+  const uint32_t cur =
+      (NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk) >> UICR_REGOUT0_VOUT_Pos;
 
-	if (cur == want) {
-		return 0;
-	}
+  if (cur == want) {
+    return 0;
+  }
 
-	NRF_UICR_Type tmp;
-	memcpy(&tmp, NRF_UICR, sizeof(tmp));
-	tmp.REGOUT0 = (tmp.REGOUT0 & ~((uint32_t)UICR_REGOUT0_VOUT_Msk)) |
-		      (want << UICR_REGOUT0_VOUT_Pos);
+  NRF_UICR_Type tmp;
+  memcpy(&tmp, NRF_UICR, sizeof(tmp));
+  tmp.REGOUT0 = (tmp.REGOUT0 & ~((uint32_t)UICR_REGOUT0_VOUT_Msk)) |
+                (want << UICR_REGOUT0_VOUT_Pos);
 
-	if (nrfx_nvmc_uicr_erase() != 0) {
-		fatal_blink();
-	}
+  if (nrfx_nvmc_uicr_erase() != 0) {
+    fatal_blink();
+  }
 
-	nrfx_nvmc_bytes_write(NRF_UICR_BASE, &tmp, sizeof(tmp));
-	while (!nrfx_nvmc_write_done_check()) {
-	}
+  nrfx_nvmc_bytes_write(NRF_UICR_BASE, &tmp, sizeof(tmp));
+  while (!nrfx_nvmc_write_done_check()) {
+  }
 
-	/* Readback verification: confirms the field we cared about landed.
-	 * If the chip is in a state that silently drops UICR writes (APPROTECT,
-	 * NVMC misconfig, hardware fault), this catches it before we reset
-	 * into an unknown VDD.
-	 */
-	const uint32_t got =
-		(NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk) >> UICR_REGOUT0_VOUT_Pos;
-	if (got != want) {
-		fatal_blink();
-	}
+  /* Readback verification: confirms the field we cared about landed.
+   * If the chip is in a state that silently drops UICR writes (APPROTECT,
+   * NVMC misconfig, hardware fault), this catches it before we reset
+   * into an unknown VDD.
+   */
+  const uint32_t got =
+      (NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk) >> UICR_REGOUT0_VOUT_Pos;
+  if (got != want) {
+    fatal_blink();
+  }
 
-	NVIC_SystemReset();
-	return 0;
+  NVIC_SystemReset();
+  return 0;
 }
 
 SYS_INIT(board_regulator_init, PRE_KERNEL_1, 0);
 
-#endif  /* CONFIG_BOARD_BPARASITE_NRF52840 */
+#endif /* CONFIG_BOARD_BPARASITE_NRF52840 */

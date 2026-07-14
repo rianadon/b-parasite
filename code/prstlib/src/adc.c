@@ -176,7 +176,7 @@ int prst_adc_batt_read(prst_batt_t* out) {
   // When the battery channel samples VDDH/5 instead of VDD, scale back up
   // so downstream code sees the true battery voltage.
   out->adc_read.millivolts *= CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER;
-  out->adc_read.voltage    *= CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER;
+  out->adc_read.voltage *= CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER;
   set_battery_percent(&out->adc_read, out);
   return 0;
 }
