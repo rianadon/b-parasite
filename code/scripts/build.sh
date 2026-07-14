@@ -63,6 +63,12 @@ case "$SAMPLE" in
     usage ;;
 esac
 
+# The workspace top dir is the parent of this script's dir (code/scripts/).
+# Resolved before anything inspects the tree, so the checks below don't depend
+# on the caller's cwd — CI invokes this as code/scripts/build.sh from the repo
+# root, not from code/.
+WORKSPACE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
 if [ "$UF2" = "1" ]; then
   if [ "$SOC" != "nrf52840" ]; then
     echo "--uf2 is only wired up for nrf52840 (family 0xADA52840); got '$SOC'" >&2
@@ -81,7 +87,7 @@ if [ "$UF2" = "1" ]; then
   # because zb_nrf_nvram.c hard-includes pm_config.h). Otherwise turn
   # PM off so the linker honours the DT slot0 offset instead of letting
   # PM default the app to 0x0.
-  if [ ! -f "samples/$SAMPLE/pm_static.yml" ]; then
+  if [ ! -f "$WORKSPACE_DIR/samples/$SAMPLE/pm_static.yml" ]; then
     CMAKE_EXTRA="$CMAKE_EXTRA -DSB_CONFIG_PARTITION_MANAGER=n -DCONFIG_PARTITION_MANAGER_ENABLED=n"
   fi
 fi
@@ -103,8 +109,6 @@ elif [ "$DEV" = "1" ]; then
   WEST_SNIPPETS+=(--snippet cdc-acm-console --snippet dev)
 fi
 
-# The workspace top dir is the parent of this script's dir (code/scripts/).
-WORKSPACE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 echo "Running build for sample='$SAMPLE', soc='$SOC', revision='$REV', uf2='$UF2' with CMAKE_EXTRA='$CMAKE_EXTRA' in workspace_dir='$WORKSPACE_DIR'…"
 cd "$WORKSPACE_DIR"
 
