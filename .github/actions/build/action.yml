@@ -26,10 +26,7 @@ inputs:
     description: "Apply the dev snippet (USB CDC console, verbose logs, fast loop)"
     default: "false"
   output-bin:
-    description: "Output binary filename for the artifact"
-    default: ""
-  artifact-name:
-    description: "Name of the uploaded artifact. Defaults to output-bin."
+    description: "Output binary filename. Also names the uploaded artifact."
     default: ""
 runs:
   using: "composite"
@@ -63,11 +60,20 @@ runs:
         photo=$(scale 3546) # CONFIG_PRSTLIB_PHOTO_CURRENT_SUN_UA default
         echo "REGOUT0=$REGOUT0 (${mv} mV): dry=$dry wet=$wet photo_current_sun_ua=$photo"
         echo "flags=-DCONFIG_BPARASITE_REGOUT0_${REGOUT0}=y -DCONFIG_PRSTLIB_SOIL_DRY_RAW=$dry -DCONFIG_PRSTLIB_SOIL_WET_RAW=$wet -DCONFIG_PRSTLIB_PHOTO_CURRENT_SUN_UA=$photo" >> "$GITHUB_OUTPUT"
+    # -D flags go on the command line, the documented interface (see
+    # code/README.md); build.sh forwards each one to west build. They're
+    # deliberately unquoted so the shell splits them into separate arguments.
     - name: Build
       shell: bash
       env:
-        CMAKE_EXTRA: ${{ steps.cal.outputs.flags }} ${{ inputs.cmake-extra }}
-      run: code/scripts/build.sh "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}" ${{ inputs.uf2 == 'true' && '--uf2' || '' }} ${{ inputs.dev == 'true' && '--dev' || '' }}
+        CAL_FLAGS: ${{ steps.cal.outputs.flags }}
+        EXTRA_FLAGS: ${{ inputs.cmake-extra }}
+      run: >-
+        code/scripts/build.sh
+        "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}"
+        ${{ inputs.uf2 == 'true' && '--uf2' || '' }}
+        ${{ inputs.dev == 'true' && '--dev' || '' }}
+        $CAL_FLAGS $EXTRA_FLAGS
     - name: Prepare artifact
       if: inputs.output-bin != ''
       shell: bash
@@ -84,7 +90,6 @@ runs:
       if: inputs.output-bin != ''
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ inputs.artifact-name != '' && inputs.artifact-name || inputs.output-bin }}
         path: ${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}
         archive: false
         if-no-files-found: error

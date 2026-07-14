@@ -8,7 +8,7 @@
 
 This is my fork of [b-parasite](https://github.com/rbaron/b-parasite), an open source soil moisture and ambient temperature/humidity/light sensor. Notable changes are:
 - I changed the bluetooth module to MinewSemi nrf52840-MS88SF21. This is because it's
-- I've added a USB-C connector, and the bluetooth module is programmed with the [Adafruit nRF52 bootloader](https://github.com/rianadon/Adafruit_nRF52_Bootloader). The module can now be powered by either the coin cell and/or USB. If both are plugged in, priority is given to USB.
+- I've added a USB-C connector, and the bluetooth module is programmed with the [Adafruit nRF52 bootloader](https://github.com/rianadon/Adafruit_nRF52_Bootloader). The module can now be powered by either the coin cell and/or USB. If both are plugged in, priority is given to USB. Do be careful to ground yourself before plugging in USB. There was not room for ESD diodes on the PCB.
 - Instead of feeding the battery directly to the chip voltage, I utilize the internal LDO to step down the voltage. This has several benefits. Battery life is extended due to running the chip and wireless transmitter at lower voltage, wireless transmission is consistent regardless of battery voltage, and there is no need to calibrate across different voltages. Only 1 measurement each of wet/dry moisture and sun luminosity are required to calibrate the sensor.
 - Utilizing a USB COM port, calibration can now easily be performed without any specialized hardware.
 - I've changed a few components to what's in stock on LCSC. The most noticeable of these is I replaced the Sensirion SHTC3, which was not in stock at the time of ordering, with a cheap clone. It's accurate within a few degrees F.

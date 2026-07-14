@@ -80,7 +80,6 @@ jobs:
           regout0: ${{ matrix.regout0 }}
           cmake-extra: ${{ steps.flags.outputs.cmake_extra }}
           output-bin: ${{ steps.flags.outputs.name }}.uf2
-          artifact-name: release-${{ steps.flags.outputs.name }}
 
   # Bring-up firmware: USB CDC console, verbose logs, ~5 s loop. Not a battery
   # build — it's what you flash to read raw ADC values during calibration. It
@@ -119,7 +118,6 @@ jobs:
           regout0: ${{ matrix.regout0 }}
           cmake-extra: -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y
           output-bin: ${{ steps.flags.outputs.name }}.uf2
-          artifact-name: release-${{ steps.flags.outputs.name }}
 
   # Roll the "latest" release forward on every build of main, so the release
   # always reflects the tip of the branch. Pull requests build but don't publish.
@@ -133,14 +131,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Every artifact this workflow uploads is a release UF2, so take them all.
+      # (upload-artifact with archive:false names each artifact after the file
+      # itself, ignoring the `name` input — so there's no prefix to filter on.)
       - uses: actions/download-artifact@v8
         with:
-          pattern: release-*
           path: artifacts
           merge-multiple: true
-      - name: Generate SHA256 checksums
-        working-directory: artifacts
-        run: sha256sum *.uf2 > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           token: ${{ github.token }}
@@ -149,6 +146,4 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
-          files: |
-            artifacts/*.uf2
-            artifacts/SHA256SUMS.txt
+          files: artifacts/**/*.uf2
