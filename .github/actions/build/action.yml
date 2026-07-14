@@ -10,6 +10,12 @@ inputs:
   revision:
     description: "Board revision to use"
     default: "2.0.0"
+  regout0:
+    description: >-
+      REGOUT0 voltage choice (e.g. 2V1, 2V4). Selects
+      CONFIG_BPARASITE_REGOUT0_<choice> and rescales the soil/photo
+      calibration constants, which were measured at 2.1 V.
+    default: ""
   cmake-extra:
     description: "Extra CMake arguments"
     default: ""
@@ -32,10 +38,35 @@ runs:
       id: paths
       shell: bash
       run: echo "build_dir=code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}${{ inputs.dev == 'true' && '_dev' || '' }}" >> "$GITHUB_OUTPUT"
+    # The soil endpoints and the phototransistor reference current are all
+    # ratiometric in VDD: the sensors are driven from the regulated rail, so a
+    # k-times higher rail scales the raw ADC counts (and the photocurrent at a
+    # given illuminance) by k, with no offset. The Kconfig defaults were
+    # measured at 2.1 V, so rescale them by VDD/2.1 for any other rail.
+    - name: Scale calibration for REGOUT0
+      id: cal
+      if: inputs.regout0 != ''
+      shell: bash
+      env:
+        REGOUT0: ${{ inputs.regout0 }}
+      run: |
+        set -euo pipefail
+        # "2V4" -> 2400 mV
+        mv=$(echo "$REGOUT0" | awk -F'V' '{ printf "%d", ($1 * 1000) + ($2 * 100) }')
+        if [ "$mv" -lt 1800 ] || [ "$mv" -gt 3300 ]; then
+          echo "REGOUT0='$REGOUT0' parsed to an implausible ${mv} mV" >&2
+          exit 1
+        fi
+        scale() { awk -v base="$1" -v mv="$mv" 'BEGIN { printf "%d", int((base * mv / 2100) + 0.5) }'; }
+        dry=$(scale 510)    # CONFIG_PRSTLIB_SOIL_DRY_RAW default
+        wet=$(scale 179)    # CONFIG_PRSTLIB_SOIL_WET_RAW default
+        photo=$(scale 3546) # CONFIG_PRSTLIB_PHOTO_CURRENT_SUN_UA default
+        echo "REGOUT0=$REGOUT0 (${mv} mV): dry=$dry wet=$wet photo_current_sun_ua=$photo"
+        echo "flags=-DCONFIG_BPARASITE_REGOUT0_${REGOUT0}=y -DCONFIG_PRSTLIB_SOIL_DRY_RAW=$dry -DCONFIG_PRSTLIB_SOIL_WET_RAW=$wet -DCONFIG_PRSTLIB_PHOTO_CURRENT_SUN_UA=$photo" >> "$GITHUB_OUTPUT"
     - name: Build
       shell: bash
       env:
-        CMAKE_EXTRA: ${{ inputs.cmake-extra }}
+        CMAKE_EXTRA: ${{ steps.cal.outputs.flags }} ${{ inputs.cmake-extra }}
       run: code/scripts/build.sh "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}" ${{ inputs.uf2 == 'true' && '--uf2' || '' }} ${{ inputs.dev == 'true' && '--dev' || '' }}
     - name: Prepare artifact
       if: inputs.output-bin != ''

@@ -1,9 +1,37 @@
-[![b-parasite firmware build](https://github.com/rbaron/b-parasite/actions/workflows/b-parasite.yml/badge.svg?branch=main)](https://github.com/rbaron/b-parasite/actions/workflows/b-parasite.yml)
-
 # b-parasite
 <p align="center">
-  <img src="img/resized/b-parasite-2.0.0.jpg" width="512px" border="0" alt="PCB front and back photo" />
+  <img src="img/resized/img-header.jpg" width="600px" border="0" alt="PCB in the soil" /><br>
+  <i>This image is just for showing off the full PCB.<br>The sensor must be pushed down to the horizontal white line to work properly.</i>
 </p>
+
+<a href='https://cosmos-store.ryanis.cool/products/b-parasite-soil-moisture-sensor' target="_blank"><img alt='Buy at Cosmos Store' src='img/badge/cosmos.svg'/></a>
+
+This is my fork of [b-parasite](https://github.com/rbaron/b-parasite), an open source soil moisture and ambient temperature/humidity/light sensor. Notable changes are:
+- I changed the bluetooth module to MinewSemi nrf52840-MS88SF21. This is because it's
+- I've added a USB-C connector, and the bluetooth module is programmed with the [Adafruit nRF52 bootloader](https://github.com/rianadon/Adafruit_nRF52_Bootloader). The module can now be powered by either the coin cell and/or USB. If both are plugged in, priority is given to USB.
+- Instead of feeding the battery directly to the chip voltage, I utilize the internal LDO to step down the voltage. This has several benefits. Battery life is extended due to running the chip and wireless transmitter at lower voltage, wireless transmission is consistent regardless of battery voltage, and there is no need to calibrate across different voltages. Only 1 measurement each of wet/dry moisture and sun luminosity are required to calibrate the sensor.
+- Utilizing a USB COM port, calibration can now easily be performed without any specialized hardware.
+- I've changed a few components to what's in stock on LCSC. The most noticeable of these is I replaced the Sensirion SHTC3, which was not in stock at the time of ordering, with a cheap clone. It's accurate within a few degrees F.
+
+<p align="center">
+  <img src="img/resized/b-parasite-2.0.0ry1.jpg" width="512px" border="0" alt="PCB front and back photo" />
+</p>
+
+Instead of version tags I publish the software binaries on every commit. Check the [releases](https://github.com/rianadon/b-parasite/releases) to grab your preferred UF2. There are binaries for both BLE and Zigbee. I've tested both; while BLE is supposedly the more stable one I've been using Zigbee without issues.
+
+For building the firmware yourself or performing your own calibration, see [code/README.md](code/README.md). To upload code, plug the b-parasite into your computer with a usb-c cable and press the reset button (RST) two times in quick succession. The LED (D2) will start pulsing in and out.
+
+<p align="center">
+    <img alt="location of reset button on the PCB" src="img/resized/reset.jpg" height="200" />
+</p>
+
+**Errata:** On the PCB I accidentally routed the sensor to P0.26, which does not support analog input. Therefore I've solder bridged P0.26 to P0.04 and used P0.04 as the sensor pin in the code. If you are manufacturing the PCBs in my fork yourself, I suggest you edit the PCB to connect SENS_OUT to P0.04 so that the solder bridge is not required.
+
+Speaking of building these yourself, the most economical option is to order the PCBs with only the top soldered then solder on the USB connector and coin cell holder yourself with a stencil.
+
+The original README is below:
+
+---------------
 
 b-parasite is an open source soil moisture and ambient temperature/humidity/light sensor.
 

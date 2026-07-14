@@ -3,7 +3,7 @@
 
 choice
 	prompt "REGOUT0 voltage (VDD when high-voltage mode is active)"
-	default BPARASITE_REGOUT0_1V8
+	default BPARASITE_REGOUT0_2V1
 	depends on BOARD_BPARASITE_NRF52840
 	help
 	  Selects the regulated VDD output when the chip is in high-voltage

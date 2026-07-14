@@ -21,57 +21,93 @@ jobs:
           check-path: "code"
           exclude-regex: '\/build\/'
 
-  # The shipped firmware: ble + zigbee for the nrf52840 @ 2.0.0ry1 board, each
-  # in three reporting cadences. Everything here is a .uf2, flashed by dropping
-  # it on the Adafruit bootloader's USB mass-storage volume.
-  build-ble:
+  # The shipped firmware: every combination of sample x reporting cadence x
+  # regulated VDD, for the nrf52840 @ 2.0.0ry1 board. 2 x 3 x 2 = 12 UF2s,
+  # flashed by dropping them on the Adafruit bootloader's USB volume.
+  build:
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          - interval: 1min
-            sleep_msec: 60000
-          - interval: 10min
-            sleep_msec: 600000
-          - interval: 60min
-            sleep_msec: 3600000
+        sample: [ble, zigbee]
+        interval: [1min, 10min, 60min]
+        regout0: [2V1, 2V4]
     runs-on: ubuntu-22.04
     container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     env:
       CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build ble ${{ matrix.interval }}
+    name: Build ${{ matrix.sample }} ${{ matrix.regout0 }} ${{ matrix.interval }}
     needs:
       - lint
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Compose build flags
+        id: flags
+        shell: bash
+        env:
+          SAMPLE: ${{ matrix.sample }}
+          INTERVAL: ${{ matrix.interval }}
+          REGOUT0: ${{ matrix.regout0 }}
+        run: |
+          set -euo pipefail
+          case "$INTERVAL" in
+            1min)  secs=60 ;;
+            10min) secs=600 ;;
+            60min) secs=3600 ;;
+            *) echo "unhandled interval: $INTERVAL" >&2; exit 1 ;;
+          esac
+
+          if [ "$SAMPLE" = "ble" ]; then
+            cadence="-DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y -DCONFIG_PRST_SLEEP_DURATION_MSEC=$((secs * 1000))"
+          else
+            # The parent poll interval tracks the sleep duration: polling every
+            # 10 s (the Kconfig default) keeps the radio awake often enough to
+            # erase the savings of the longer cadences. The tradeoff is that
+            # downlink commands from the coordinator queue for up to one poll
+            # interval.
+            cadence="-DCONFIG_PRST_ZB_SLEEP_DURATION_SEC=$secs -DCONFIG_PRST_ZB_PARENT_POLL_INTERVAL_SEC=$secs"
+          fi
+
+          echo "cmake_extra=-DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n $cadence" >> "$GITHUB_OUTPUT"
+          echo "name=${SAMPLE}_nrf52840_2.0.0ry1_${REGOUT0,,}_${INTERVAL}" >> "$GITHUB_OUTPUT"
       - name: Build
         uses: ./.github/actions/build
         with:
-          sample: ble
+          sample: ${{ matrix.sample }}
           soc: nrf52840
           revision: 2.0.0ry1
           uf2: "true"
-          cmake-extra: >-
-            -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y
-            -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
-            -DCONFIG_PRST_SLEEP_DURATION_MSEC=${{ matrix.sleep_msec }}
-          output-bin: ble_nrf52840_2.0.0ry1_${{ matrix.interval }}.uf2
-          artifact-name: release-ble-${{ matrix.interval }}
+          regout0: ${{ matrix.regout0 }}
+          cmake-extra: ${{ steps.flags.outputs.cmake_extra }}
+          output-bin: ${{ steps.flags.outputs.name }}.uf2
+          artifact-name: release-${{ steps.flags.outputs.name }}
 
   # Bring-up firmware: USB CDC console, verbose logs, ~5 s loop. Not a battery
-  # build — it's what you flash to read raw ADC values during calibration, so
-  # the sleep cadence comes from the dev snippet rather than the interval matrix.
+  # build — it's what you flash to read raw ADC values during calibration. It
+  # varies only over REGOUT0 (the raw ADC endpoints you're there to measure
+  # shift with VDD); ble only, and the sleep cadence comes from the dev snippet
+  # rather than the interval axis.
   build-ble-dev:
+    strategy:
+      fail-fast: false
+      matrix:
+        regout0: [2V1, 2V4]
     runs-on: ubuntu-22.04
     container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     env:
       CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build ble dev
+    name: Build ble dev ${{ matrix.regout0 }}
     needs:
       - lint
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Resolve artifact name
+        id: flags
+        shell: bash
+        env:
+          REGOUT0: ${{ matrix.regout0 }}
+        run: echo "name=ble_nrf52840_2.0.0ry1_${REGOUT0,,}_dev" >> "$GITHUB_OUTPUT"
       - name: Build
         uses: ./.github/actions/build
         with:
@@ -80,57 +116,18 @@ jobs:
           revision: 2.0.0ry1
           uf2: "true"
           dev: "true"
+          regout0: ${{ matrix.regout0 }}
           cmake-extra: -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y
-          output-bin: ble_nrf52840_2.0.0ry1_dev.uf2
-          artifact-name: release-ble-dev
-
-  build-zigbee:
-    strategy:
-      matrix:
-        include:
-          - interval: 1min
-            sleep_sec: 60
-          - interval: 10min
-            sleep_sec: 600
-          - interval: 60min
-            sleep_sec: 3600
-    runs-on: ubuntu-22.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
-    env:
-      CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build zigbee ${{ matrix.interval }}
-    needs:
-      - lint
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Build
-        uses: ./.github/actions/build
-        with:
-          sample: zigbee
-          soc: nrf52840
-          revision: 2.0.0ry1
-          uf2: "true"
-          # The parent poll interval tracks the sleep duration: polling every
-          # 10 s (the Kconfig default) keeps the radio awake often enough to
-          # erase the savings of the longer cadences. The tradeoff is that
-          # downlink commands from the coordinator queue for up to one poll
-          # interval.
-          cmake-extra: >-
-            -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
-            -DCONFIG_PRST_ZB_SLEEP_DURATION_SEC=${{ matrix.sleep_sec }}
-            -DCONFIG_PRST_ZB_PARENT_POLL_INTERVAL_SEC=${{ matrix.sleep_sec }}
-          output-bin: zigbee_nrf52840_2.0.0ry1_${{ matrix.interval }}.uf2
-          artifact-name: release-zigbee-${{ matrix.interval }}
+          output-bin: ${{ steps.flags.outputs.name }}.uf2
+          artifact-name: release-${{ steps.flags.outputs.name }}
 
   # Roll the "latest" release forward on every build of main, so the release
   # always reflects the tip of the branch. Pull requests build but don't publish.
   publish:
     name: Publish Latest Firmware
     needs:
-      - build-ble
+      - build
       - build-ble-dev
-      - build-zigbee
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     permissions:

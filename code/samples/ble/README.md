@@ -37,42 +37,7 @@ The disadvantages of this encoding are:
 
 ## Building
 
-The build script lives at [`code/scripts/build.sh`](../../scripts/build.sh) and runs inside the same Zephyr CI container that GitHub Actions uses. A wrapper at [`code/scripts/build-with-docker.sh`](../../scripts/build-with-docker.sh) handles the container — it auto-detects `podman` or `docker` on your `PATH` and works with either (override with `B_PARASITE_CONTAINER_RUNTIME=docker` if needed).
-
-```
-usage: build.sh <sample> [soc] [revision] [--uf2] [--dev]
-```
-
-### Selecting the regulated VDD (`REGOUT0`)
-
-On board revision `2.0.0ry1` the CR2032 is wired to `VDDH` and `VDD` is the regulated output of the chip's internal LDO/DC-DC. `UICR.REGOUT0` sets the output voltage. The firmware reads `CONFIG_BPARASITE_REGOUT0_*` at boot, programs UICR if it doesn't match, and resets — so the choice baked into your UF2 *is* the chip's runtime VDD.
-
-Pick one (applies to both production and development builds, pass via `-DCONFIG_BPARASITE_REGOUT0_*V*=y`):
-
-| Kconfig | VDD | BLE TX cap | Best for | CR2032 life (realistic) |
-|---|---|---|---|---|
-| `REGOUT0_DEFAULT` | 1.8 V (chip default) | 0 dBm | LED-less / IR LED only | ~3.5 yr |
-| **`REGOUT0_2V1`** | **2.1 V** | **0 dBm** | **indoor planter, red LED at Vf ≤ 1.95 V — recommended default** | **~2.5–3.7 yr** |
-| `REGOUT0_2V4` | 2.4 V | +4 dBm | balanced indoor/outdoor, more BLE range, cold-weather LED headroom | ~2.0–3.0 yr |
-| `REGOUT0_2V7` | 2.7 V | +4 dBm | needs full BLE +4 dBm, low headroom on CR2032 — regulator dropouts when battery < 2.85 V | ~1.5–2.0 yr |
-| `REGOUT0_3V0` | 3.0 V | +8 dBm | **USB / boosted VDDH only** — regulator dropouts immediately on CR2032 | n/a on CR2032 |
-| `REGOUT0_3V3` | 3.3 V | +8 dBm | **USB / boosted VDDH only** | n/a on CR2032 |
-
-The choice also drives `CONFIG_PRSTLIB_RADIO_TX_PWR_DBM` (an int — 0, 4, or 8 dBm — single source of truth used by both BLE and zigbee), which in turn sets the `CONFIG_BT_CTLR_TX_PWR_*` choice. See [`prstlib/boards/bparasite/Kconfig.defconfig`](../../prstlib/boards/bparasite/Kconfig.defconfig). To override TX power without changing REGOUT0, pass `-DCONFIG_PRSTLIB_RADIO_TX_PWR_DBM=N`. Also auto-configured: `CONFIG_PRSTLIB_BATT_VOLTAGE_DIVIDER` (× 5 when sampling VDDH/5 for battery, automatic for any non-DEFAULT choice).
-
-#### Why not just stay at 3.3 V?
-
-A CR2032 sits at ~3.0 V open-circuit and sags to ~2.7–2.85 V under TX-pulse load. The internal regulator needs ~150 mV of headroom — so anything ≥ 2.7 V dropouts under load and the chip effectively runs *unregulated* at the battery voltage, which (a) wastes the DC-DC step-down efficiency win, (b) gives sliding TX power as the battery droops, (c) makes ADC readings drift with V_bat. **2.1 V is the right answer for a CR2032 sensor that lives near a Home Assistant gateway.**
-
-#### Required hardware
-
-The chip enters high-voltage mode (where `REGOUT0` matters) only when `VDDH > VDD`. If your schematic has `VDD` and `VDDH` tied together (or both wired to the battery), `MAINREGSTATUS == NORMAL`, the firmware short-circuits, and you see V_bat on VDD regardless of UICR. The 2.0.0ry1 board layout assumes:
-
-- `VDDH` ← CR2032 (+) + decoupling caps
-- `VDD` ← decoupling cap to GND only
-- `DEC4` ← inductor + cap (for DC-DC mode)
-
-If you've measured 2.97 V on VDD running on battery and a UF2 that should have written `REGOUT0=2.1`, the schematic is the culprit. See [`prstlib/src/board_regout0.c`](../../prstlib/src/board_regout0.c) for the boot-time hook that gates on `MAINREGSTATUS`.
+See [`code/README.md`](../../README.md) for the build script, the container wrapper, the `REGOUT0` voltage table, and the soil-moisture calibration procedure — all shared with the zigbee sample. What follows is ble-specific.
 
 ### Production build (deploy to battery)
 
@@ -85,20 +50,11 @@ Default `prj.conf` settings: 10-min wake cadence, 1-s advertise window, no USB s
 
 Output: `samples/ble/build_nrf52840_2.0.0ry1/ble/zephyr/zephyr.uf2` (~400 KB).
 
-The `CONFIG_BPARASITE_REGOUT0_*` choice determines:
-- `UICR.REGOUT0` programming at first boot (firmware reflashes the chip if VDD doesn't match) — see [`prstlib/src/board_regout0.c`](../../prstlib/src/board_regout0.c).
-- Radio TX power (`PRSTLIB_RADIO_TX_PWR_DBM` defaults to 0 at 1.8–2.1 V, 4 at 2.4–2.7 V, 8 at 3.0–3.3 V; BLE picks its `BT_CTLR_TX_PWR_*` choice from this int, zigbee passes it to `zb_trans_set_tx_power()`).
-- Battery ADC divider (`PRSTLIB_BATT_VOLTAGE_DIVIDER`) — set to 5 when the 2.0.0ry1 overlay samples `NRF_SAADC_VDDHDIV5`.
-
-To flash: double-tap reset → drag the `.uf2` onto the `BPARASITE` USB drive.
+BLE picks its `CONFIG_BT_CTLR_TX_PWR_*` choice from `PRSTLIB_RADIO_TX_PWR_DBM`, which the `REGOUT0` choice sets (0 dBm at 1.8–2.1 V, 4 at 2.4–2.7 V, 8 at 3.0–3.3 V).
 
 ### Development build (bring-up, sensor calibration, debugging)
 
-Same command + `--dev`. This applies the shared [`dev`](../../prstlib/snippets/dev/) Zephyr snippet on top of `prj.conf`:
-
-- USB CDC ACM virtual UART → console + log destination
-- `CONFIG_LOG_DEFAULT_LEVEL=4` (verbose) + `CONFIG_PRSTLIB_LOG_LEVEL_DBG=y` (per-sensor debug logs)
-- `CONFIG_PRST_SLEEP_DURATION_MSEC=5000` (advertise every ~6 s instead of every 10 min)
+Same command + `--dev` (see [`code/README.md`](../../README.md#development-builds) for what the snippet turns on). For ble it also sets `CONFIG_PRST_SLEEP_DURATION_MSEC=5000`, advertising every ~6 s instead of every 10 min.
 
 ```
 ./scripts/build-with-docker.sh ble nrf52840 2.0.0ry1 --uf2 --dev \
@@ -106,49 +62,6 @@ Same command + `--dev`. This applies the shared [`dev`](../../prstlib/snippets/d
 ```
 
 Output: `samples/ble/build_nrf52840_2.0.0ry1_dev/ble/zephyr/zephyr.uf2` (~445 KB).
-
-The dev build lives in a separate build dir (`_dev` suffix), so dev and prod artifacts never overwrite each other.
-
-After flashing, the board enumerates as a USB CDC ACM device (look for `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on Linux). Open it with any terminal: `screen /dev/cu.usbmodemXXXX 115200`.
-
-Don't deploy a dev build to battery — USB and the 5-s loop drain a CR2032 in days, not years.
-
-### Calibrating soil moisture (per-board, per-VDD)
-
-The reported soil-moisture percentage is linear between two raw ADC endpoints:
-
-- `PRSTLIB_SOIL_DRY_RAW` — raw 10-bit SAADC value with the sensor in **open air**
-- `PRSTLIB_SOIL_WET_RAW` — raw 10-bit SAADC value with the sensor **submerged in tap water**
-
-Both are pure `int` Kconfigs, settable per build via `-D` flags. Both shift with VDD (re-measure if you change `REGOUT0`) and vary ±30% between physical PCBs — calibrate once per device. The defaults (`500`/`150`) are placeholders that compile and produce plausible-but-wrong numbers; they aren't a measurement.
-
-#### Procedure
-
-1. Flash a `--dev` UF2 (see *Development build* above) and open the CDC console: `screen /dev/cu.usbmodemXXXX 115200`.
-2. With the sensor sitting in **open air** (touching nothing), wait for a log line like:
-   ```
-   Read soil moisture 2: -8.30 | Raw 505 | V_drive: 2.10 | Dry: 500.00 | Wet: 150.00
-   ```
-   Record the **Raw** value (here, `505`) — this is your `PRSTLIB_SOIL_DRY_RAW`. "Dry"/"Wet" in the log are the calibration the firmware is *currently using*, not your measurement.
-3. Submerge the sensor pads in **tap water**, deep enough to fully cover the fork. Wait for the next log line; record its Raw value — that's `PRSTLIB_SOIL_WET_RAW`.
-4. Rebuild the production UF2 with your two values appended:
-
-```
-./scripts/build-with-docker.sh ble nrf52840 2.0.0ry1 --uf2 \
-  -DCONFIG_BPARASITE_REGOUT0_2V1=y \
-  -DCONFIG_PRSTLIB_SOIL_DRY_RAW=505 \
-  -DCONFIG_PRSTLIB_SOIL_WET_RAW=172
-```
-
-Sanity check after flashing: with the sensor in air, advertised moisture should report ~0%; submerged, ~100%.
-
-> **Note:** soil calibration via Kconfig is wired up only on regulated-VDD builds (any non-`REGOUT0_DEFAULT` choice). On the legacy unregulated path (`REGOUT0_DEFAULT`), the dry/wet endpoints still come from the polynomial coefficients in [`prstlib/boards/bparasite/*.overlay`](../../prstlib/boards/bparasite/) and the `-D` flags are ignored — see [`prstlib/src/adc.c`](../../prstlib/src/adc.c).
-
-### Other targets
-
-- `./scripts/build-with-docker.sh blinky nrf52840 2.0.0ry1 --uf2` — LED blink smoke test
-- `./scripts/build-with-docker.sh input nrf52840 2.0.0ry1 --uf2` — button + LED test
-- `./scripts/build-with-docker.sh soil-read-loop nrf52840 2.0.0ry1 --uf2` — analog chain debug (already configured for USB CDC logging by default)
 
 ## Battery Life
 **tl;dr**: Theoretically well over two years with default settings.
