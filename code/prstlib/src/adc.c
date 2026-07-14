@@ -21,12 +21,14 @@ static const uint32_t pulse = DT_PROP(DT_NODELABEL(soil_pwm), pulse);
 static const int dry_coeffs[3] = DT_PROP(DT_NODELABEL(soil_calibration_coeffs), dry);
 static const int wet_coeffs[3] = DT_PROP(DT_NODELABEL(soil_calibration_coeffs), wet);
 
-// Soil PWM drive voltage. When REGOUT0 regulates VDD to a fixed rail, the
-// drive amplitude no longer tracks the battery, so the dry/wet polynomial
+// Soil PWM drive voltage. REGOUT0 regulates VDD to a fixed rail, so the
+// drive amplitude no longer tracks the battery and the dry/wet endpoints
 // must be evaluated at that constant — otherwise reported moisture would
-// drift as the CR2032 discharges. On a default-REGOUT0 build, VDD == VDDH
-// == battery and the legacy battery-voltage evaluation is correct.
-#if defined(CONFIG_BPARASITE_REGOUT0_2V1)
+// drift as the CR2032 discharges. Boards without a REGOUT0 choice (i.e.
+// not nRF52840) fall back to the legacy battery-voltage evaluation.
+#if defined(CONFIG_BPARASITE_REGOUT0_1V8)
+#define PRST_SOIL_VDRIVE_FIXED 1.8f
+#elif defined(CONFIG_BPARASITE_REGOUT0_2V1)
 #define PRST_SOIL_VDRIVE_FIXED 2.1f
 #elif defined(CONFIG_BPARASITE_REGOUT0_2V4)
 #define PRST_SOIL_VDRIVE_FIXED 2.4f

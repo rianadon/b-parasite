@@ -21,9 +21,9 @@ config PRSTLIB_SOIL_DRY_RAW
 	  Raw 10-bit SAADC reading expected with the sensor in air. Measured
 	  on-bench at the regulated VDD: flash a --dev build, observe the
 	  raw value in the LOG_DBG output with the sensor untouched. Only
-	  consulted when REGOUT0 regulates VDD; on default-REGOUT0 builds
-	  the legacy polynomial fit from soil_calibration_coeffs (DT) is
-	  used instead.
+	  consulted when REGOUT0 regulates VDD (every BPARASITE_REGOUT0_*
+	  choice does). On boards without a REGOUT0 choice the legacy
+	  polynomial fit from soil_calibration_coeffs (DT) is used instead.
 
 config PRSTLIB_SOIL_WET_RAW
 	int "Raw ADC reading at wet endpoint (sensor in water)"

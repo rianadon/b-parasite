@@ -13,8 +13,17 @@ inputs:
   cmake-extra:
     description: "Extra CMake arguments"
     default: ""
+  uf2:
+    description: "Build a .uf2 (Adafruit bootloader, nrf52840 only) instead of merged.hex"
+    default: "false"
+  dev:
+    description: "Apply the dev snippet (USB CDC console, verbose logs, fast loop)"
+    default: "false"
   output-bin:
     description: "Output binary filename for the artifact"
+    default: ""
+  artifact-name:
+    description: "Name of the uploaded artifact. Defaults to output-bin."
     default: ""
 runs:
   using: "composite"
@@ -22,20 +31,29 @@ runs:
     - name: Resolve build dir
       id: paths
       shell: bash
-      run: echo "build_dir=code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}" >> "$GITHUB_OUTPUT"
+      run: echo "build_dir=code/samples/${{ inputs.sample }}/build_${{ inputs.soc }}_${{ inputs.revision }}${{ inputs.dev == 'true' && '_dev' || '' }}" >> "$GITHUB_OUTPUT"
     - name: Build
       shell: bash
       env:
         CMAKE_EXTRA: ${{ inputs.cmake-extra }}
-      run: code/scripts/build.sh "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}"
+      run: code/scripts/build.sh "${{ inputs.sample }}" "${{ inputs.soc }}" "${{ inputs.revision }}" ${{ inputs.uf2 == 'true' && '--uf2' || '' }} ${{ inputs.dev == 'true' && '--dev' || '' }}
     - name: Prepare artifact
       if: inputs.output-bin != ''
       shell: bash
-      run: cp "${{ steps.paths.outputs.build_dir }}/merged.hex" "${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}"
+      env:
+        BUILD_DIR: ${{ steps.paths.outputs.build_dir }}
+      run: |
+        if [ "${{ inputs.uf2 }}" = "true" ]; then
+          src="$BUILD_DIR/${{ inputs.sample }}/zephyr/zephyr.uf2"
+        else
+          src="$BUILD_DIR/merged.hex"
+        fi
+        cp "$src" "$BUILD_DIR/${{ inputs.output-bin }}"
     - name: Upload artifact
       if: inputs.output-bin != ''
       uses: actions/upload-artifact@v7
       with:
+        name: ${{ inputs.artifact-name != '' && inputs.artifact-name || inputs.output-bin }}
         path: ${{ steps.paths.outputs.build_dir }}/${{ inputs.output-bin }}
         archive: false
         if-no-files-found: error

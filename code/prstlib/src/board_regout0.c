@@ -25,7 +25,7 @@
  * trusting the chip.
  */
 
-#if defined(CONFIG_BOARD_BPARASITE_NRF52840) && !defined(CONFIG_BPARASITE_REGOUT0_DEFAULT)
+#if defined(CONFIG_BOARD_BPARASITE_NRF52840)
 
 #include <stdint.h>
 #include <string.h>
@@ -49,7 +49,9 @@
 
 static uint32_t desired_vout(void)
 {
-#if CONFIG_BPARASITE_REGOUT0_2V1
+#if CONFIG_BPARASITE_REGOUT0_1V8
+	return UICR_REGOUT0_VOUT_1V8;
+#elif CONFIG_BPARASITE_REGOUT0_2V1
 	return UICR_REGOUT0_VOUT_2V1;
 #elif CONFIG_BPARASITE_REGOUT0_2V4
 	return UICR_REGOUT0_VOUT_2V4;
@@ -118,4 +120,4 @@ static int board_regulator_init(void)
 
 SYS_INIT(board_regulator_init, PRE_KERNEL_1, 0);
 
-#endif  /* CONFIG_BOARD_BPARASITE_NRF52840 && !CONFIG_BPARASITE_REGOUT0_DEFAULT */
+#endif  /* CONFIG_BOARD_BPARASITE_NRF52840 */

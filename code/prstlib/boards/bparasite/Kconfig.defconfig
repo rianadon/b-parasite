@@ -12,18 +12,18 @@ config BOARD_REVISION_CODE
 	int "Board revision code. An integer representation of the board revision."
 	default 1
 
-# When REGOUT0 is non-default the board.c hook programs UICR.REGOUT0 to
-# regulate VDD below VDDH, which means the battery channel must sample
-# VDDH/5 (see bparasite_nrf52840_2_0_0_ry1.overlay) and the firmware
+# board_regout0.c programs UICR.REGOUT0 for every choice — including 1V8,
+# which is written explicitly rather than left at the chip's factory value.
+# VDD is therefore always regulated below VDDH, so the battery channel
+# samples VDDH/5 (see bparasite_nrf52840_2_0_0_ry1.overlay) and the firmware
 # must scale the reading back up by 5.
 config PRSTLIB_BATT_VOLTAGE_DIVIDER
-	default 5 if !BPARASITE_REGOUT0_DEFAULT && BOARD_BPARASITE_NRF52840
+	default 5 if BOARD_BPARASITE_NRF52840
 
-# board_regout0.c calls nrfx_nvmc_uicr_erase()/_bytes_write() when the
-# REGOUT0 choice changes. Pull the nrfx NVMC driver into the build for
-# any non-DEFAULT choice so those symbols actually link.
+# board_regout0.c calls nrfx_nvmc_uicr_erase()/_bytes_write(). Pull the nrfx
+# NVMC driver into the build so those symbols actually link.
 config NRFX_NVMC
-	default y if !BPARASITE_REGOUT0_DEFAULT && BOARD_BPARASITE_NRF52840
+	default y if BOARD_BPARASITE_NRF52840
 
 # Single source of truth for radio TX power across BLE + 802.15.4. The
 # regulated VDD is the constraint: +8 dBm needs VDD ≳ 2.7 V under TX
@@ -32,7 +32,7 @@ config NRFX_NVMC
 # zb_trans_set_tx_power().
 config PRSTLIB_RADIO_TX_PWR_DBM
 	int
-	default 0 if BPARASITE_REGOUT0_DEFAULT || BPARASITE_REGOUT0_2V1
+	default 0 if BPARASITE_REGOUT0_1V8 || BPARASITE_REGOUT0_2V1
 	default 4 if BPARASITE_REGOUT0_2V4 || BPARASITE_REGOUT0_2V7
 	default 8 if BPARASITE_REGOUT0_3V0 || BPARASITE_REGOUT0_3V3
 	depends on BOARD_BPARASITE_NRF52840

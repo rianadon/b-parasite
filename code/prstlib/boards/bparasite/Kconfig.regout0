@@ -3,7 +3,7 @@
 
 choice
 	prompt "REGOUT0 voltage (VDD when high-voltage mode is active)"
-	default BPARASITE_REGOUT0_DEFAULT
+	default BPARASITE_REGOUT0_1V8
 	depends on BOARD_BPARASITE_NRF52840
 	help
 	  Selects the regulated VDD output when the chip is in high-voltage
@@ -13,11 +13,13 @@ choice
 	  when the chip is in normal-voltage mode (VDD tied directly to the
 	  supply).
 
-config BPARASITE_REGOUT0_DEFAULT
-	bool "Chip default (1.8 V)"
+config BPARASITE_REGOUT0_1V8
+	bool "1.8 V — longest CR2032 life, LED won't light"
 	help
-	  Don't program UICR. Chip stays at factory default (1.8 V in HV
-	  mode, supply voltage in NV mode).
+	  Programs UICR.REGOUT0 to the 1.8 V setting explicitly. The chip's
+	  factory value happens to be 1.8 V too, but it's encoded as a
+	  distinct "default" field value, so a virgin chip still takes one
+	  UICR erase + write + reset on first boot.
 
 config BPARASITE_REGOUT0_2V1
 	bool "2.1 V — best CR2032 life, red LED OK at Vf ≈ 1.85 V"

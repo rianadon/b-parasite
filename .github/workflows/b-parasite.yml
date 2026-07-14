@@ -3,11 +3,10 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -22,73 +21,24 @@ jobs:
           check-path: "code"
           exclude-regex: '\/build\/'
 
-  build-blinky:
-    runs-on: ubuntu-22.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
-    env:
-      CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build blinky
-    needs:
-      - lint
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Build blinky
-        uses: ./.github/actions/build
-        with:
-          sample: blinky
-          soc: nrf52840
-          revision: 2.0.0
-          output-bin: blinky_nrf52840_2.0.0.hex
-
-  build-input:
-    runs-on: ubuntu-22.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
-    env:
-      CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build input
-    needs:
-      - lint
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Build input
-        uses: ./.github/actions/build
-        with:
-          sample: input
-          soc: nrf52840
-          revision: 2.0.0
-          output-bin: input_nrf52840_2.0.0.hex
-
-  build-soil-read-loop:
-    runs-on: ubuntu-22.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
-    env:
-      CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build soil_read_loop
-    needs:
-      - lint
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Build soil_read_loop
-        uses: ./.github/actions/build
-        with:
-          sample: soil-read-loop
-          soc: nrf52840
-          revision: 2.0.0
-          output-bin: soil_read_loop_nrf52840_2.0.0.hex
-
+  # The shipped firmware: ble + zigbee for the nrf52840 @ 2.0.0ry1 board, each
+  # in three reporting cadences. Everything here is a .uf2, flashed by dropping
+  # it on the Adafruit bootloader's USB mass-storage volume.
   build-ble:
     strategy:
       matrix:
-        soc: [nrf52840, nrf52833]
-        revision: [1.1.0, 1.2.0, 2.0.0]
+        include:
+          - interval: 1min
+            sleep_msec: 60000
+          - interval: 10min
+            sleep_msec: 600000
+          - interval: 60min
+            sleep_msec: 3600000
     runs-on: ubuntu-22.04
     container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     env:
       CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build ble ${{ matrix.soc }}@${{ matrix.revision }}
+    name: Build ble ${{ matrix.interval }}
     needs:
       - lint
     steps:
@@ -98,21 +48,57 @@ jobs:
         uses: ./.github/actions/build
         with:
           sample: ble
-          soc: ${{ matrix.soc }}
-          revision: ${{ matrix.revision }}
-          cmake-extra: -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
-          output-bin: ble_${{ matrix.soc }}_${{ matrix.revision }}.hex
+          soc: nrf52840
+          revision: 2.0.0ry1
+          uf2: "true"
+          cmake-extra: >-
+            -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y
+            -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
+            -DCONFIG_PRST_SLEEP_DURATION_MSEC=${{ matrix.sleep_msec }}
+          output-bin: ble_nrf52840_2.0.0ry1_${{ matrix.interval }}.uf2
+          artifact-name: release-ble-${{ matrix.interval }}
 
-  build-zigbee:
-    strategy:
-      matrix:
-        soc: [nrf52840, nrf52833]
-        revision: [1.2.0, 2.0.0]
+  # Bring-up firmware: USB CDC console, verbose logs, ~5 s loop. Not a battery
+  # build — it's what you flash to read raw ADC values during calibration, so
+  # the sleep cadence comes from the dev snippet rather than the interval matrix.
+  build-ble-dev:
     runs-on: ubuntu-22.04
     container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
     env:
       CMAKE_PREFIX_PATH: /opt/toolchains
-    name: Build zigbee ${{ matrix.soc }}@${{ matrix.revision }}
+    name: Build ble dev
+    needs:
+      - lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Build
+        uses: ./.github/actions/build
+        with:
+          sample: ble
+          soc: nrf52840
+          revision: 2.0.0ry1
+          uf2: "true"
+          dev: "true"
+          cmake-extra: -DCONFIG_PRST_BLE_ENCODING_BTHOME_V2=y
+          output-bin: ble_nrf52840_2.0.0ry1_dev.uf2
+          artifact-name: release-ble-dev
+
+  build-zigbee:
+    strategy:
+      matrix:
+        include:
+          - interval: 1min
+            sleep_sec: 60
+          - interval: 10min
+            sleep_sec: 600
+          - interval: 60min
+            sleep_sec: 3600
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.28.8
+    env:
+      CMAKE_PREFIX_PATH: /opt/toolchains
+    name: Build zigbee ${{ matrix.interval }}
     needs:
       - lint
     steps:
@@ -122,30 +108,50 @@ jobs:
         uses: ./.github/actions/build
         with:
           sample: zigbee
-          soc: ${{ matrix.soc }}
-          revision: ${{ matrix.revision }}
-          cmake-extra: -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
-          output-bin: zigbee_${{ matrix.soc }}_${{ matrix.revision }}.hex
+          soc: nrf52840
+          revision: 2.0.0ry1
+          uf2: "true"
+          # The parent poll interval tracks the sleep duration: polling every
+          # 10 s (the Kconfig default) keeps the radio awake often enough to
+          # erase the savings of the longer cadences. The tradeoff is that
+          # downlink commands from the coordinator queue for up to one poll
+          # interval.
+          cmake-extra: >-
+            -DCONFIG_PRSTLIB_LOG_LEVEL_DBG=n
+            -DCONFIG_PRST_ZB_SLEEP_DURATION_SEC=${{ matrix.sleep_sec }}
+            -DCONFIG_PRST_ZB_PARENT_POLL_INTERVAL_SEC=${{ matrix.sleep_sec }}
+          output-bin: zigbee_nrf52840_2.0.0ry1_${{ matrix.interval }}.uf2
+          artifact-name: release-zigbee-${{ matrix.interval }}
 
-  # Create a draft release if the build was triggered by a v* tag push.
-  maybe-release:
+  # Roll the "latest" release forward on every build of main, so the release
+  # always reflects the tip of the branch. Pull requests build but don't publish.
+  publish:
+    name: Publish Latest Firmware
     needs:
-      [build-blinky, build-input, build-soil-read-loop, build-ble, build-zigbee]
-    if: startsWith(github.ref, 'refs/tags/v')
+      - build-ble
+      - build-ble-dev
+      - build-zigbee
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
+          pattern: release-*
           path: artifacts
           merge-multiple: true
       - name: Generate SHA256 checksums
         working-directory: artifacts
-        run: sha256sum *.hex > SHA256SUMS.txt
-
+        run: sha256sum *.uf2 > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          draft: true
-          files: artifacts/*
+          token: ${{ github.token }}
+          name: Latest Firmware
+          tag_name: latest
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/*.uf2
+            artifacts/SHA256SUMS.txt
