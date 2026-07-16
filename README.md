@@ -19,7 +19,7 @@ This is my fork of [b-parasite](https://github.com/rbaron/b-parasite), an open s
 
 Instead of version tags I publish the software binaries on every commit. Check the [releases](https://github.com/rianadon/b-parasite/releases) to grab your preferred UF2. There are binaries for both BLE and Zigbee. I've tested both; while BLE is supposedly the more stable one I've been using Zigbee without issues.
 
-For building the firmware yourself or performing your own calibration, see [code/README.md](code/README.md). To upload code, plug the b-parasite into your computer with a usb-c cable and press the reset button (RST) two times in quick succession. The LED (D2) will start pulsing in and out.
+To upload code, plug the b-parasite into your computer with a usb-c cable and press the reset button (RST) two times in quick succession. It's circled in red below. The LED (D2) will start pulsing in and out, and you'll see a removable drive named `BPARASITE` appear. Drag your `.uf2` file over to this drive (or copy and paste it in). Once it's copied, the microcontroller will automatically reboot with the new firmware. For building the firmware yourself or performing your own calibration, see [code/README.md](code/README.md).
 
 <p align="center">
     <img alt="location of reset button on the PCB" src="img/resized/reset.jpg" height="200" />
