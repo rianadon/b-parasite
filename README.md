@@ -4,8 +4,6 @@
   <i>This image is just for showing off the full PCB.<br>The sensor must be pushed down to the horizontal white line to work properly.</i>
 </p>
 
-<a href='https://cosmos-store.ryanis.cool/products/b-parasite-soil-moisture-sensor' target="_blank"><img alt='Buy at Cosmos Store' src='img/badge/cosmos.svg'/></a>
-
 This is my fork of [b-parasite](https://github.com/rbaron/b-parasite), an open source soil moisture and ambient temperature/humidity/light sensor. Notable changes are:
 - I changed the bluetooth module to MinewSemi nrf52840-MS88SF21 because I have extra from other projects.
 - I've added a USB-C connector, and the bluetooth module is programmed with the [Adafruit nRF52 bootloader](https://github.com/rianadon/Adafruit_nRF52_Bootloader). The module can now be powered by either the coin cell and/or USB. If both are plugged in, priority is given to USB. Do be careful to ground yourself before plugging in USB. There was not room for ESD diodes on the PCB.
